@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
   Camera, Upload, ShieldCheck, AlertTriangle, CheckCircle2,
-  Lock, RefreshCw, FileImage, Hash, Eye, ArrowRight, ShieldAlert
+  Lock, RefreshCw, FileImage, Hash, Eye, ArrowRight, ShieldAlert,
+  Video, VideoOff
 } from 'lucide-react'
 import { api, Profile, Consent, MediaAsset } from '../../services/api'
 
@@ -33,7 +34,72 @@ export const CaptureView: React.FC<CaptureViewProps> = ({ profiles, initialProfi
     neutralPose: true,
   })
 
+  // Webcam live stream state
+  const [useWebcam, setUseWebcam] = useState(false)
+  const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Webcam activation
+  async function startWebcam() {
+    setError('')
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+      })
+      setWebcamStream(stream)
+      setUseWebcam(true)
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+      }
+    } catch {
+      setError('No se pudo acceder a la cámara web. Verifique los permisos en el navegador o utilice la carga por archivo.')
+    }
+  }
+
+  function stopWebcam() {
+    if (webcamStream) {
+      webcamStream.getTracks().forEach(t => t.stop())
+      setWebcamStream(null)
+    }
+    setUseWebcam(false)
+  }
+
+  // Cleanup webcam stream on unmount
+  useEffect(() => {
+    return () => {
+      if (webcamStream) {
+        webcamStream.getTracks().forEach(t => t.stop())
+      }
+    }
+  }, [webcamStream])
+
+  // Attach stream to video tag whenever videoRef mounts
+  useEffect(() => {
+    if (useWebcam && videoRef.current && webcamStream) {
+      videoRef.current.srcObject = webcamStream
+    }
+  }, [useWebcam, webcamStream])
+
+  // Capture frame snapshot from live video stream
+  async function handleCaptureFromWebcam() {
+    if (!videoRef.current) return
+    const video = videoRef.current
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth || 1280
+    canvas.height = video.videoHeight || 720
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    canvas.toBlob(async (blob) => {
+      if (!blob) return
+      const file = new File([blob], `live_scan_${viewType}_${Date.now()}.jpg`, { type: 'image/jpeg' })
+      await handleFileSelected(file)
+      stopWebcam()
+      setNotice('Captura en tiempo real tomada de la cámara con éxito.')
+    }, 'image/jpeg', 0.95)
+  }
 
   // Sincronizar selección de perfil
   useEffect(() => {
@@ -186,6 +252,34 @@ export const CaptureView: React.FC<CaptureViewProps> = ({ profiles, initialProfi
             <Camera size={18} color="#45cbbd" />
           </div>
 
+          {/* Mode Switcher: Static File vs Live Webcam Scan */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+            <button
+              type="button"
+              className={`btn-preset ${!useWebcam ? 'active' : ''}`}
+              style={{ flex: 1, justifyContent: 'center' }}
+              onClick={() => { stopWebcam(); }}
+            >
+              <Upload size={14} /> Carga por Archivo
+            </button>
+            <button
+              type="button"
+              className={`btn-preset ${useWebcam ? 'active' : ''}`}
+              style={{ flex: 1, justifyContent: 'center', borderColor: useWebcam ? '#00ffcc' : undefined }}
+              disabled={!activeConsent}
+              onClick={() => {
+                if (useWebcam) {
+                  stopWebcam()
+                } else {
+                  startWebcam()
+                }
+              }}
+            >
+              {useWebcam ? <VideoOff size={14} /> : <Video size={14} color="#00ffcc" />}
+              {useWebcam ? 'Desactivar Cámara' : 'Escáner Cámara en Vivo'}
+            </button>
+          </div>
+
           {/* Perspective selector */}
           <div className="view-type-tabs">
             {(['frontal', 'lateral', 'posterior'] as const).map(vt => (
@@ -202,7 +296,7 @@ export const CaptureView: React.FC<CaptureViewProps> = ({ profiles, initialProfi
           {/* Guide Overlay Container */}
           <div
             className={`capture-dropzone ${!activeConsent ? 'disabled' : ''}`}
-            onClick={() => activeConsent && fileInputRef.current?.click()}
+            onClick={() => !useWebcam && activeConsent && fileInputRef.current?.click()}
           >
             <input
               type="file"
@@ -212,7 +306,36 @@ export const CaptureView: React.FC<CaptureViewProps> = ({ profiles, initialProfi
               onChange={e => e.target.files?.[0] && handleFileSelected(e.target.files[0])}
             />
 
-            {previewUrl ? (
+            {useWebcam ? (
+              <div className="preview-container" style={{ position: 'relative', width: '100%', height: '360px', overflow: 'hidden', background: '#000', borderRadius: '8px' }}>
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+                <SilhouetteGuide viewType={viewType} />
+                <div style={{ position: 'absolute', bottom: '12px', left: '0', right: '0', display: 'flex', justifyContent: 'center', gap: '8px', zIndex: 10 }}>
+                  <button
+                    type="button"
+                    className="primary"
+                    style={{ padding: '8px 16px', boxShadow: '0 4px 16px rgba(0,0,0,0.6)' }}
+                    onClick={(e) => { e.stopPropagation(); handleCaptureFromWebcam(); }}
+                  >
+                    <Camera size={15} /> Capturar Fotograma en Vivo
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-preset"
+                    style={{ background: 'rgba(10,20,30,0.85)' }}
+                    onClick={(e) => { e.stopPropagation(); stopWebcam(); }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : previewUrl ? (
               <div className="preview-container">
                 <img src={previewUrl} alt="Preview" className="preview-img" />
                 <SilhouetteGuide viewType={viewType} />
