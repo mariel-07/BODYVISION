@@ -133,6 +133,7 @@ export default function App() {
           {section === 'Expedientes' && (
             <ProfilesView
               profiles={profiles}
+              initialProfileId={contextProfileId}
               onRefresh={refreshData}
               onNavigate={handleNavigate}
             />

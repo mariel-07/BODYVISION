@@ -61,6 +61,15 @@ export const MeasurementsView: React.FC<MeasurementsViewProps> = ({ profiles, in
     }
   }
 
+  // Sincronizar selección de perfil
+  useEffect(() => {
+    if (initialProfileId) {
+      setSelectedProfileId(initialProfileId)
+    } else if (!selectedProfileId && profiles.length > 0) {
+      setSelectedProfileId(profiles[0].id)
+    }
+  }, [initialProfileId, profiles, selectedProfileId])
+
   useEffect(() => {
     loadMeasurements()
   }, [selectedProfileId])

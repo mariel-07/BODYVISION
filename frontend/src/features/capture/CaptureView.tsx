@@ -35,6 +35,15 @@ export const CaptureView: React.FC<CaptureViewProps> = ({ profiles, initialProfi
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Sincronizar selección de perfil
+  useEffect(() => {
+    if (initialProfileId) {
+      setSelectedProfileId(initialProfileId)
+    } else if (!selectedProfileId && profiles.length > 0) {
+      setSelectedProfileId(profiles[0].id)
+    }
+  }, [initialProfileId, profiles, selectedProfileId])
+
   // Load consents and media when profile changes
   useEffect(() => {
     if (selectedProfileId) {

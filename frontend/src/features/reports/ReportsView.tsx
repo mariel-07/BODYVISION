@@ -28,6 +28,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ profiles, initialProfi
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
 
+  // Sincronizar selección de perfil
+  useEffect(() => {
+    if (initialProfileId) {
+      setSelectedProfileId(initialProfileId)
+    } else if (!selectedProfileId && profiles.length > 0) {
+      setSelectedProfileId(profiles[0].id)
+    }
+  }, [initialProfileId, profiles, selectedProfileId])
+
   // Load all profile data
   useEffect(() => {
     if (selectedProfileId) {

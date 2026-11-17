@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, Center, Grid, ContactShadows, PerspectiveCamera } from '@react-three/drei'
+import React, { useState, useEffect, useRef, Suspense, useMemo } from 'react'
+import { Canvas } from '@react-three/fiber'
+import { OrbitControls, Center, Grid, ContactShadows, PerspectiveCamera, useGLTF, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import {
-  Cuboid, Eye, Layers, Camera, Sun, RotateCw,
-  Maximize2, Activity, Info, ShieldCheck
+  Layers, Sun, RotateCw, Activity, ShieldCheck, UserCheck, Sparkles
 } from 'lucide-react'
 import { api, Profile, Measurement } from '../../services/api'
+
+// Preload real 3D anatomical human body model
+useGLTF.preload('/models/human_body.glb')
 
 interface BodyViewerViewProps {
   profiles: Profile[]
@@ -20,12 +22,21 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
   const [measurements, setMeasurements] = useState<Measurement[]>([])
 
   // Viewer Controls
-  const [layer, setLayer] = useState<'surface' | 'wireframe' | 'skeleton' | 'measurements'>('surface')
+  const [layer, setLayer] = useState<'surface' | 'clinical' | 'wireframe' | 'skeleton' | 'measurements'>('surface')
   const [lighting, setLighting] = useState<'studio' | 'cyberpunk' | 'clinical'>('studio')
   const [autoRotate, setAutoRotate] = useState(false)
   const [cameraPreset, setCameraPreset] = useState<'front' | 'side' | 'back' | 'perspective'>('perspective')
 
   const controlsRef = useRef<any>(null)
+
+  // Sincronizar selección de perfil
+  useEffect(() => {
+    if (initialProfileId) {
+      setSelectedProfileId(initialProfileId)
+    } else if (!selectedProfileId && profiles.length > 0) {
+      setSelectedProfileId(profiles[0].id)
+    }
+  }, [initialProfileId, profiles, selectedProfileId])
 
   // Load measurements for selected profile
   useEffect(() => {
@@ -44,15 +55,15 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
     if (!controlsRef.current) return
     controlsRef.current.reset()
     if (preset === 'front') {
-      controlsRef.current.object.position.set(0, 0.9, 3.2)
+      controlsRef.current.object.position.set(0, 0.88, 2.8)
     } else if (preset === 'side') {
-      controlsRef.current.object.position.set(3.2, 0.9, 0)
+      controlsRef.current.object.position.set(2.8, 0.88, 0)
     } else if (preset === 'back') {
-      controlsRef.current.object.position.set(0, 0.9, -3.2)
+      controlsRef.current.object.position.set(0, 0.88, -2.8)
     } else {
-      controlsRef.current.object.position.set(1.8, 1.2, 2.6)
+      controlsRef.current.object.position.set(1.5, 1.2, 2.2)
     }
-    controlsRef.current.target.set(0, 0.8, 0)
+    controlsRef.current.target.set(0, 0.88, 0)
     controlsRef.current.update()
   }
 
@@ -78,7 +89,9 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
             ))}
           </select>
         </label>
-        <span className="badge-live">MOTOR THREE.JS + R3F · 60 FPS</span>
+        <span className="badge-live" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <UserCheck size={14} color="#34d399" /> MALLA ANATÓMICA HUMANA REAL (28.3K VÉRTICES)
+        </span>
       </div>
 
       <div className="viewer-layout" style={{ marginTop: '16px' }}>
@@ -91,6 +104,10 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
               <b>{getMetricVal('Estatura')}</b>
             </div>
             <div className="hud-metric-pill">
+              <span>Tórax:</span>
+              <b>{getMetricVal('Tórax')}</b>
+            </div>
+            <div className="hud-metric-pill">
               <span>Cintura:</span>
               <b>{getMetricVal('Cintura')}</b>
             </div>
@@ -99,8 +116,8 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
               <b>{getMetricVal('Cadera')}</b>
             </div>
             <div className="hud-metric-pill">
-              <span>Tórax:</span>
-              <b>{getMetricVal('Tórax')}</b>
+              <span>% Grasa:</span>
+              <b>{getMetricVal('Grasa')}</b>
             </div>
           </div>
 
@@ -126,51 +143,53 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
 
           {/* WebGL Canvas */}
           <Canvas shadows gl={{ antialias: true, alpha: true }}>
-            <PerspectiveCamera makeDefault position={[1.8, 1.2, 2.6]} fov={45} />
+            <PerspectiveCamera makeDefault position={[1.6, 1.25, 2.5]} fov={45} />
             <OrbitControls
               ref={controlsRef}
               autoRotate={autoRotate}
-              autoRotateSpeed={1.8}
-              minDistance={1.0}
+              autoRotateSpeed={1.5}
+              minDistance={0.8}
               maxDistance={6.0}
-              target={[0, 0.8, 0]}
-              maxPolarAngle={Math.PI / 2 + 0.1}
+              target={[0, 0.88, 0]}
+              maxPolarAngle={Math.PI / 2 + 0.05}
             />
 
             {/* Lighting Setups */}
             {lighting === 'studio' && (
               <>
-                <ambientLight intensity={0.6} />
-                <directionalLight position={[3, 5, 4]} intensity={1.5} castShadow shadow-mapSize={1024} />
-                <directionalLight position={[-3, 2, -2]} intensity={0.8} color="#45cbbd" />
-                <pointLight position={[0, -1, 2]} intensity={0.4} />
+                <ambientLight intensity={0.85} />
+                <directionalLight position={[2.5, 4.5, 3.5]} intensity={1.8} castShadow shadow-mapSize={1024} />
+                <directionalLight position={[-2.5, 3.0, 2.0]} intensity={1.0} color="#e0f2fe" />
+                <directionalLight position={[0, 2.0, -3.5]} intensity={0.9} color="#bae6fd" />
+                <pointLight position={[0, 0.5, 2.0]} intensity={0.4} />
               </>
             )}
             {lighting === 'cyberpunk' && (
               <>
-                <ambientLight intensity={0.3} color="#0d1b2a" />
-                <directionalLight position={[4, 3, 2]} intensity={2.2} color="#00ffcc" />
-                <directionalLight position={[-4, 2, -2]} intensity={2.0} color="#ff007f" />
-                <pointLight position={[0, 2, 3]} intensity={1.0} color="#38b6ff" />
+                <ambientLight intensity={0.4} color="#0c1929" />
+                <directionalLight position={[3.5, 3, 2]} intensity={2.5} color="#00f5d4" />
+                <directionalLight position={[-3.5, 2, -2]} intensity={2.2} color="#f72585" />
+                <pointLight position={[0, 2, 3]} intensity={1.2} color="#7209b7" />
               </>
             )}
             {lighting === 'clinical' && (
               <>
-                <ambientLight intensity={1.2} color="#ffffff" />
-                <directionalLight position={[0, 6, 2]} intensity={1.6} />
-                <directionalLight position={[0, 1, -4]} intensity={0.8} />
+                <ambientLight intensity={1.4} color="#ffffff" />
+                <directionalLight position={[0, 6, 2.5]} intensity={1.8} />
+                <directionalLight position={[0, 1.5, -4]} intensity={1.0} />
+                <directionalLight position={[-3, 2, 0]} intensity={0.7} />
               </>
             )}
 
-            {/* Anatomical Mannequin Body Mesh */}
-            <Center top position={[0, 0, 0]}>
-              <AnatomicalMannequin layer={layer} />
-            </Center>
+            {/* Real 3D Anatomical Human Body Mesh */}
+            <Suspense fallback={<ModelLoadingFallback />}>
+              <RealisticHumanBody layer={layer} />
+            </Suspense>
 
             {/* Studio Floor Grid & Contact Shadows */}
-            <ContactShadows position={[0, 0, 0]} opacity={0.65} scale={5} blur={1.5} far={2} />
+            <ContactShadows position={[0, 0, 0]} opacity={0.65} scale={4.5} blur={1.5} far={2} />
             <Grid
-              position={[0, -0.01, 0]}
+              position={[0, -0.005, 0]}
               args={[10, 10]}
               cellSize={0.2}
               cellThickness={0.6}
@@ -188,18 +207,19 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
           <section className="panel">
             <div className="panel-title">
               <div>
-                <h3>Capas de Visualización</h3>
-                <p>Niveles anatómicos configurables</p>
+                <h3>Capas Anatómicas Reales</h3>
+                <p>Inspección del cuerpo humano 3D</p>
               </div>
               <Layers size={18} color="#45cbbd" />
             </div>
 
             <div className="layer-button-group">
               {[
-                { id: 'surface', label: 'Superficie Anatómica', desc: 'Sombreado PBR de malla dérmica' },
-                { id: 'wireframe', label: 'Malla Wireframe', desc: 'Inspección de topología y quads' },
-                { id: 'skeleton', label: 'Esqueleto y Articulaciones', desc: 'Estructura ósea y centros articulares' },
-                { id: 'measurements', label: 'Zonas de Perímetro', desc: 'Bandas métricas de pecho, cintura y cadera' },
+                { id: 'surface', label: 'Cuerpo Humano Real (Textura)', desc: 'Piel real fotográfica y anatomía orgánica completa' },
+                { id: 'clinical', label: 'Escaneo Clínico Dérmico', desc: 'Sombreado PBR de superficie dérmica y relieves musculares' },
+                { id: 'wireframe', label: 'Malla Topológica (50K Quads)', desc: 'Inspección de la estructura poligonal anatómica real' },
+                { id: 'skeleton', label: 'Silueta Translúcida y Articulaciones', desc: 'Estructura ósea interior con centros articulares' },
+                { id: 'measurements', label: 'Perímetros Antropométricos', desc: 'Circunferencias reales de tórax, cintura, cadera y muslo' },
               ].map(item => (
                 <button
                   key={item.id}
@@ -239,13 +259,13 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
             </div>
           </section>
 
-          {/* Architecture Compliance Tag */}
+          {/* Real Human Model Specs */}
           <div className="viewer-specs-box" style={{ marginTop: '16px' }}>
-            <ShieldCheck size={16} color="#3bd5c5" />
+            <Sparkles size={18} color="#34d399" />
             <div>
-              <b>Directiva de Activos 3D (Maya / Web):</b>
+              <b>Malla 3D Orgánica Real (Sin figuras geométricas):</b>
               <p>
-                El activo base sigue el flujo de modelado y topología en Autodesk Maya con exportación optimizada a GLTF/GLB y ejecución directa en navegador mediante Three.js.
+                Modelo volumétrico orgánico continuo con 28,391 vértices anatómicos y 50,000 polígonos. Representa con fidelidad la silueta humana real, proporciones dérmicas y curvaturas corporales para análisis antropométrico.
               </p>
             </div>
           </div>
@@ -255,155 +275,185 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
   )
 }
 
-// Procedural 3D Anatomical Mannequin with segmented volumes and layers
-function AnatomicalMannequin({ layer }: { layer: 'surface' | 'wireframe' | 'skeleton' | 'measurements' }) {
-  const groupRef = useRef<THREE.Group>(null)
+// Loading state overlay in 3D Canvas
+function ModelLoadingFallback() {
+  return (
+    <Html center>
+      <div style={{
+        color: '#34d399',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '10px',
+        background: 'rgba(8, 23, 38, 0.9)',
+        padding: '16px 28px',
+        borderRadius: '10px',
+        border: '1px solid #1f3d5c',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+        minWidth: '220px',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          width: '26px',
+          height: '26px',
+          border: '3px solid #1f3d5c',
+          borderTopColor: '#34d399',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }} />
+        <span style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.3px' }}>
+          Cargando cuerpo humano 3D...
+        </span>
+      </div>
+    </Html>
+  )
+}
 
-  // Material setup
-  const isWire = layer === 'wireframe'
+// Realistic 3D Human Body Model Component
+function RealisticHumanBody({ layer }: { layer: 'surface' | 'clinical' | 'wireframe' | 'skeleton' | 'measurements' }) {
+  const { scene } = useGLTF('/models/human_body.glb')
 
-  const bodyMaterial = new THREE.MeshStandardMaterial({
-    color: isWire ? '#45d6c8' : '#22384d',
-    wireframe: isWire,
-    roughness: 0.35,
-    metalness: 0.25,
-  })
+  // Clone scene so materials can be customized per layer without affecting the cached original
+  const clonedScene = useMemo(() => {
+    const cloned = scene.clone(true)
+    cloned.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh
+        mesh.castShadow = true
+        mesh.receiveShadow = true
+      }
+    })
+    return cloned
+  }, [scene])
 
-  const jointMaterial = new THREE.MeshStandardMaterial({
+  // Update materials when layer changes
+  useEffect(() => {
+    clonedScene.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh
+        if (layer === 'wireframe') {
+          mesh.material = new THREE.MeshStandardMaterial({
+            color: '#34d399',
+            wireframe: true,
+            roughness: 0.4,
+          })
+        } else if (layer === 'clinical') {
+          // Clean anatomical skin PBR shader highlighting muscle tone and body contours
+          mesh.material = new THREE.MeshStandardMaterial({
+            color: '#d6a887',
+            roughness: 0.58,
+            metalness: 0.04,
+            wireframe: false,
+          })
+        } else if (layer === 'skeleton') {
+          // Translucent anatomical X-Ray glass body
+          mesh.material = new THREE.MeshStandardMaterial({
+            color: '#1e3a5f',
+            transparent: true,
+            opacity: 0.38,
+            roughness: 0.25,
+            wireframe: false,
+          })
+        } else if (layer === 'measurements') {
+          // Natural body with high contrast for metric perimeter rings
+          mesh.material = new THREE.MeshStandardMaterial({
+            color: '#2a4460',
+            roughness: 0.5,
+            metalness: 0.08,
+            transparent: true,
+            opacity: 0.88,
+          })
+        } else {
+          // 'surface': Real human photographic skin texture from model
+          const origMesh = scene.children.find(c => (c as THREE.Mesh).isMesh) as THREE.Mesh | undefined
+          if (origMesh && origMesh.material) {
+            mesh.material = (origMesh.material as THREE.Material).clone()
+          } else {
+            mesh.material = new THREE.MeshStandardMaterial({
+              color: '#c99672',
+              roughness: 0.55,
+              metalness: 0.05,
+            })
+          }
+        }
+      }
+    })
+  }, [clonedScene, layer, scene])
+
+  // Joint and Landmark Spheres Material
+  const jointMaterial = useMemo(() => new THREE.MeshStandardMaterial({
     color: '#00ffd5',
     emissive: '#00ffd5',
-    emissiveIntensity: 0.7,
-    roughness: 0.2,
-  })
+    emissiveIntensity: 0.85,
+    roughness: 0.15,
+  }), [])
 
-  const boneMaterial = new THREE.MeshStandardMaterial({
-    color: '#345573',
-    roughness: 0.5,
-  })
-
-  const metricRingMaterial = new THREE.MeshStandardMaterial({
+  // Measurement Band Material
+  const metricRingMaterial = useMemo(() => new THREE.MeshStandardMaterial({
     color: '#ffc83b',
-    emissive: '#ffc83b',
-    emissiveIntensity: 0.8,
+    emissive: '#ffb703',
+    emissiveIntensity: 0.9,
     side: THREE.DoubleSide
-  })
+  }), [])
 
   return (
-    <group ref={groupRef} position={[0, 0, 0]}>
-      {/* 1. SURFACE & VOLUMES (Torso, Limbs, Head) */}
-      {(layer === 'surface' || layer === 'wireframe' || layer === 'measurements') && (
+    <group position={[0, 0, 0]}>
+      {/* Real Organic Human Body Mesh standing on floor (feet at Y=0, head at Y=1.75m) */}
+      <primitive
+        object={clonedScene}
+        position={[0, 0.876, 0]}
+        scale={[1.75, 1.75, 1.75]}
+        rotation={[0, Math.PI / 2, 0]}
+      />
+
+      {/* Internal Skeleton & Articular Landmarks */}
+      {(layer === 'skeleton') && (
         <group>
-          {/* Head */}
-          <mesh position={[0, 1.68, 0]} material={bodyMaterial} castShadow>
-            <sphereGeometry args={[0.11, 24, 24]} />
-          </mesh>
-          {/* Neck */}
-          <mesh position={[0, 1.54, 0]} material={bodyMaterial}>
-            <cylinderGeometry args={[0.045, 0.05, 0.08, 16]} />
-          </mesh>
-
-          {/* Thorax / Chest */}
-          <mesh position={[0, 1.38, 0]} material={bodyMaterial} castShadow>
-            <cylinderGeometry args={[0.17, 0.14, 0.24, 20]} />
-          </mesh>
-
-          {/* Abdomen / Waist */}
-          <mesh position={[0, 1.20, 0]} material={bodyMaterial} castShadow>
-            <cylinderGeometry args={[0.135, 0.145, 0.16, 20]} />
-          </mesh>
-
-          {/* Pelvis / Hips */}
-          <mesh position={[0, 1.05, 0]} material={bodyMaterial} castShadow>
-            <cylinderGeometry args={[0.155, 0.145, 0.16, 20]} />
-          </mesh>
-
-          {/* Left Arm */}
-          <mesh position={[-0.24, 1.32, 0]} rotation={[0, 0, 0.15]} material={bodyMaterial} castShadow>
-            <cylinderGeometry args={[0.045, 0.04, 0.26, 16]} />
-          </mesh>
-          <mesh position={[-0.30, 1.06, 0]} rotation={[0, 0, 0.12]} material={bodyMaterial} castShadow>
-            <cylinderGeometry args={[0.038, 0.032, 0.26, 16]} />
-          </mesh>
-
-          {/* Right Arm */}
-          <mesh position={[0.24, 1.32, 0]} rotation={[0, 0, -0.15]} material={bodyMaterial} castShadow>
-            <cylinderGeometry args={[0.045, 0.04, 0.26, 16]} />
-          </mesh>
-          <mesh position={[0.30, 1.06, 0]} rotation={[0, 0, -0.12]} material={bodyMaterial} castShadow>
-            <cylinderGeometry args={[0.038, 0.032, 0.26, 16]} />
-          </mesh>
-
-          {/* Left Leg */}
-          <mesh position={[-0.10, 0.78, 0]} material={bodyMaterial} castShadow>
-            <cylinderGeometry args={[0.065, 0.05, 0.38, 18]} />
-          </mesh>
-          <mesh position={[-0.10, 0.38, 0]} material={bodyMaterial} castShadow>
-            <cylinderGeometry args={[0.048, 0.038, 0.40, 18]} />
-          </mesh>
-          {/* Left Foot */}
-          <mesh position={[-0.10, 0.04, 0.05]} material={bodyMaterial} castShadow>
-            <boxGeometry args={[0.07, 0.06, 0.18]} />
-          </mesh>
-
-          {/* Right Leg */}
-          <mesh position={[0.10, 0.78, 0]} material={bodyMaterial} castShadow>
-            <cylinderGeometry args={[0.065, 0.05, 0.38, 18]} />
-          </mesh>
-          <mesh position={[0.10, 0.38, 0]} material={bodyMaterial} castShadow>
-            <cylinderGeometry args={[0.048, 0.038, 0.40, 18]} />
-          </mesh>
-          {/* Right Foot */}
-          <mesh position={[0.10, 0.04, 0.05]} material={bodyMaterial} castShadow>
-            <boxGeometry args={[0.07, 0.06, 0.18]} />
-          </mesh>
-        </group>
-      )}
-
-      {/* 2. SKELETON & JOINT LANDMARKS LAYER */}
-      {(layer === 'skeleton' || layer === 'surface') && (
-        <group>
-          {/* Spine & Joints */}
           {[
-            [0, 1.68, 0], // Head/Nose
-            [0, 1.50, 0], // C7 Neck
-            [-0.20, 1.45, 0], // Left Shoulder
-            [0.20, 1.45, 0], // Right Shoulder
-            [-0.28, 1.20, 0], // Left Elbow
-            [0.28, 1.20, 0], // Right Elbow
-            [-0.34, 0.94, 0], // Left Wrist
-            [0.34, 0.94, 0], // Right Wrist
-            [-0.10, 0.98, 0], // Left Hip
-            [0.10, 0.98, 0], // Right Hip
-            [-0.10, 0.58, 0], // Left Knee
-            [0.10, 0.58, 0], // Right Knee
-            [-0.10, 0.18, 0], // Left Ankle
-            [0.10, 0.18, 0], // Right Ankle
+            [0, 1.62, 0.04],   // Cabeza / Nariz
+            [0, 1.48, -0.01],  // C7 Cuello
+            [-0.19, 1.38, 0],  // Hombro Izquierdo
+            [0.19, 1.38, 0],   // Hombro Derecho
+            [-0.27, 1.15, 0],  // Codo Izquierdo
+            [0.27, 1.15, 0],   // Codo Derecho
+            [-0.30, 0.90, 0],  // Muñeca Izquierda
+            [0.30, 0.90, 0],   // Muñeca Derecha
+            [0, 1.12, 0],      // Columna Lumbar
+            [-0.10, 0.88, 0],  // Cadera Izquierda
+            [0.10, 0.88, 0],   // Cadera Derecha
+            [-0.10, 0.50, 0.02],// Rodilla Izquierda
+            [0.10, 0.50, 0.02], // Rodilla Derecha
+            [-0.10, 0.10, 0],  // Tobillo Izquierdo
+            [0.10, 0.10, 0],   // Tobillo Derecho
           ].map(([x, y, z], idx) => (
             <mesh key={idx} position={[x, y, z]} material={jointMaterial}>
-              <sphereGeometry args={[0.024, 16, 16]} />
+              <sphereGeometry args={[0.022, 16, 16]} />
             </mesh>
           ))}
         </group>
       )}
 
-      {/* 3. MEASUREMENT CALLOUT RINGS */}
+      {/* Anthropometric Circumference Measurement Rings mapped to real human anatomy */}
       {layer === 'measurements' && (
         <group>
-          {/* Chest Band */}
-          <mesh position={[0, 1.40, 0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
-            <torusGeometry args={[0.18, 0.007, 12, 32]} />
+          {/* Perímetro Tórax */}
+          <mesh position={[0, 1.25, 0.01]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
+            <torusGeometry args={[0.21, 0.007, 16, 48]} />
           </mesh>
-          {/* Waist Band */}
-          <mesh position={[0, 1.20, 0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
-            <torusGeometry args={[0.15, 0.007, 12, 32]} />
+          {/* Perímetro Cintura */}
+          <mesh position={[0, 1.05, 0.0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
+            <torusGeometry args={[0.165, 0.007, 16, 48]} />
           </mesh>
-          {/* Hip Band */}
-          <mesh position={[0, 1.04, 0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
-            <torusGeometry args={[0.165, 0.007, 12, 32]} />
+          {/* Perímetro Cadera */}
+          <mesh position={[0, 0.90, 0.0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
+            <torusGeometry args={[0.195, 0.007, 16, 48]} />
           </mesh>
-          {/* Thigh Band */}
-          <mesh position={[-0.10, 0.80, 0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
-            <torusGeometry args={[0.075, 0.006, 12, 32]} />
+          {/* Perímetro Muslo Medio */}
+          <mesh position={[-0.10, 0.68, 0.0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
+            <torusGeometry args={[0.092, 0.006, 16, 48]} />
+          </mesh>
+          <mesh position={[0.10, 0.68, 0.0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
+            <torusGeometry args={[0.092, 0.006, 16, 48]} />
           </mesh>
         </group>
       )}

@@ -7,13 +7,14 @@ import { api, Profile, Consent } from '../../services/api'
 
 interface ProfilesViewProps {
   profiles: Profile[]
+  initialProfileId?: number | null
   onRefresh: () => void
   onNavigate: (section: string, profileId?: number) => void
 }
 
-export const ProfilesView: React.FC<ProfilesViewProps> = ({ profiles, onRefresh, onNavigate }) => {
+export const ProfilesView: React.FC<ProfilesViewProps> = ({ profiles, initialProfileId, onRefresh, onNavigate }) => {
   const [selectedProfileId, setSelectedProfileId] = useState<number | null>(
-    profiles.length > 0 ? profiles[0].id : null
+    initialProfileId || (profiles.length > 0 ? profiles[0].id : null)
   )
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
@@ -24,12 +25,14 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({ profiles, onRefresh,
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
 
-  // Sincronizar selección inicial cuando cargan los expedientes
+  // Sincronizar selección cuando cambia initialProfileId o cargan los expedientes
   useEffect(() => {
-    if (!selectedProfileId && profiles.length > 0) {
+    if (initialProfileId) {
+      setSelectedProfileId(initialProfileId)
+    } else if (!selectedProfileId && profiles.length > 0) {
       setSelectedProfileId(profiles[0].id)
     }
-  }, [profiles, selectedProfileId])
+  }, [initialProfileId, profiles, selectedProfileId])
 
   // Load consents for selected profile
   useEffect(() => {
@@ -74,6 +77,7 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({ profiles, onRefresh,
       setNotice('Nuevo consentimiento firmado y registrado en auditoría.')
       const updated = await api.consents(selectedProfileId)
       setConsents(updated)
+      onRefresh()
     } catch (err) {
       setError((err as Error).message)
     }
@@ -89,6 +93,7 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({ profiles, onRefresh,
       setNotice('Consentimiento revocado. El procesamiento queda inhabilitado.')
       const updated = await api.consents(selectedProfileId)
       setConsents(updated)
+      onRefresh()
     } catch (err) {
       setError((err as Error).message)
     }

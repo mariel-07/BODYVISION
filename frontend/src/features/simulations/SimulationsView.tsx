@@ -27,6 +27,15 @@ export const SimulationsView: React.FC<SimulationsViewProps> = ({ profiles, init
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
 
+  // Sincronizar selección de perfil
+  useEffect(() => {
+    if (initialProfileId) {
+      setSelectedProfileId(initialProfileId)
+    } else if (!selectedProfileId && profiles.length > 0) {
+      setSelectedProfileId(profiles[0].id)
+    }
+  }, [initialProfileId, profiles, selectedProfileId])
+
   // Load profile measurements and simulations
   useEffect(() => {
     if (selectedProfileId) {

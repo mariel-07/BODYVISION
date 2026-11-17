@@ -30,6 +30,21 @@ export const PoseAnalysisView: React.FC<PoseAnalysisViewProps> = ({
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
 
+  // Sincronizar parámetros iniciales de navegación
+  useEffect(() => {
+    if (initialProfileId) {
+      setSelectedProfileId(initialProfileId)
+    } else if (!selectedProfileId && profiles.length > 0) {
+      setSelectedProfileId(profiles[0].id)
+    }
+  }, [initialProfileId, profiles, selectedProfileId])
+
+  useEffect(() => {
+    if (initialMediaId) {
+      setSelectedMediaId(initialMediaId)
+    }
+  }, [initialMediaId])
+
   // Load media and analyses for profile
   useEffect(() => {
     if (selectedProfileId) {
