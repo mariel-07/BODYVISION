@@ -235,50 +235,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         />
       </div>
 
-      {/* ============================================================ */}
-      {/* 4. ACCESOS RÁPIDOS A MÓDULOS DEL SISTEMA                    */}
-      {/* ============================================================ */}
-      <section className="panel" style={{ marginTop: '16px' }}>
-        <div className="panel-title">
-          <div>
-            <h3>Navegación Rápida a Módulos Clínicos</h3>
-            <p>Interconexión directa de los datos biomecánicos, capturas y reportes médicos</p>
-          </div>
-          <span className="badge-live">9 MÓDULOS DISPONIBLES</span>
-        </div>
-        <div className="launchpad-grid">
-          {[
-            { id: 'Expedientes', name: 'Expedientes', desc: 'Ficha clínica y consentimientos', icon: Archive },
-            { id: 'Mediciones', name: 'Mediciones', desc: 'Catálogo de biomarcadores y BIA', icon: Activity },
-            { id: 'Captura', name: 'Captura Segura', desc: 'Tríada fotográfica y hashing', icon: Camera },
-            { id: 'Análisis IA', name: 'Análisis Pose IA', desc: 'Estimación MediaPipe 33 landmarks', icon: ScanFace },
-            { id: 'Visor 3D', name: 'Visor 3D Completo', desc: 'Adaptación de peso en tiempo real', icon: Cuboid },
-            { id: 'Simulador', name: 'Simulador Hipotético', desc: 'Escenarios y evolución predictiva', icon: SlidersHorizontal },
-            { id: 'Reportes', name: 'Reportes de Evolución', desc: 'Exportación con firma digital', icon: FileText },
-            { id: 'Administración', name: 'Admin & Auditoría', desc: 'RBAC y registros de seguridad', icon: Settings },
-          ].map(m => {
-            const Icon = m.icon
-            return (
-              <button key={m.id} className="launchpad-card" onClick={() => onNavigate(m.id)}>
-                <div className="launchpad-icon"><Icon size={18} /></div>
-                <div className="launchpad-info">
-                  <b>{m.name}</b>
-                  <span>{m.desc}</span>
-                </div>
-                <ChevronRight size={14} className="arrow" />
-              </button>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* Compliance Disclaimer */}
-      <div className="compliance-banner" style={{ marginTop: '14px' }}>
-        <AlertTriangle size={15} color="#d97706" />
-        <div>
-          <b>Aviso de Cumplimiento Clínico &amp; Trazabilidad:</b> BODYVISION AI es una plataforma de telemetría postural, termográfica y volumétrica asistida. Todos los índices y porcentajes reflejados corresponden a mediciones cuantitativas no invasivas con trazabilidad y consentimientos bajo Ley 29733 y RGPD.
-        </div>
-      </div>
+      
+       
+      
     </div>
   )
 }
