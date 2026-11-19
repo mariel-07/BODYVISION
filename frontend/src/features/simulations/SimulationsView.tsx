@@ -8,9 +8,10 @@ import { api, Profile, Measurement, Simulation } from '../../services/api'
 interface SimulationsViewProps {
   profiles: Profile[]
   initialProfileId?: number | null
+  onSelectProfile?: (id: number) => void
 }
 
-export const SimulationsView: React.FC<SimulationsViewProps> = ({ profiles, initialProfileId }) => {
+export const SimulationsView: React.FC<SimulationsViewProps> = ({ profiles, initialProfileId, onSelectProfile }) => {
   const [selectedProfileId, setSelectedProfileId] = useState<number | ''>(
     initialProfileId || (profiles.length > 0 ? profiles[0].id : '')
   )
@@ -29,12 +30,12 @@ export const SimulationsView: React.FC<SimulationsViewProps> = ({ profiles, init
 
   // Sincronizar selección de perfil
   useEffect(() => {
-    if (initialProfileId) {
+    if (initialProfileId && initialProfileId !== selectedProfileId) {
       setSelectedProfileId(initialProfileId)
     } else if (!selectedProfileId && profiles.length > 0) {
       setSelectedProfileId(profiles[0].id)
     }
-  }, [initialProfileId, profiles, selectedProfileId])
+  }, [initialProfileId, profiles])
 
   // Load profile measurements and simulations
   useEffect(() => {
@@ -107,7 +108,11 @@ export const SimulationsView: React.FC<SimulationsViewProps> = ({ profiles, init
           <b>Expediente para Simulación:</b>
           <select
             value={selectedProfileId}
-            onChange={e => setSelectedProfileId(e.target.value ? Number(e.target.value) : '')}
+            onChange={e => {
+              const val = e.target.value ? Number(e.target.value) : ''
+              setSelectedProfileId(val)
+              if (val && onSelectProfile) onSelectProfile(Number(val))
+            }}
           >
             <option value="">-- Seleccionar expediente --</option>
             {profiles.map(p => (

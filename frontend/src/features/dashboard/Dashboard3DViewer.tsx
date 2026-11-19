@@ -86,6 +86,7 @@ interface Dashboard3DViewerProps {
   selectedHotspot: string | null
   onSelectHotspot: (id: string) => void
   patientName?: string
+  patientWeight?: number
 }
 
 export const Dashboard3DViewer: React.FC<Dashboard3DViewerProps> = ({
@@ -93,7 +94,8 @@ export const Dashboard3DViewer: React.FC<Dashboard3DViewerProps> = ({
   setActiveLayer,
   selectedHotspot,
   onSelectHotspot,
-  patientName = 'Mateo Silva'
+  patientName = 'Mateo Silva',
+  patientWeight = 68.0
 }) => {
   const [autoRotate, setAutoRotate] = useState(false)
   const [showPlumbLine, setShowPlumbLine] = useState(true)
@@ -221,6 +223,7 @@ export const Dashboard3DViewer: React.FC<Dashboard3DViewerProps> = ({
               onSelectHotspot={onSelectHotspot}
               showJoints={showJoints}
               showPlumbLine={showPlumbLine}
+              weight={patientWeight}
             />
           </Suspense>
 
@@ -329,6 +332,7 @@ interface MeshProps {
   onSelectHotspot: (id: string) => void
   showJoints: boolean
   showPlumbLine: boolean
+  weight?: number
 }
 
 function DashboardHumanMesh({
@@ -336,7 +340,8 @@ function DashboardHumanMesh({
   selectedHotspot,
   onSelectHotspot,
   showJoints,
-  showPlumbLine
+  showPlumbLine,
+  weight = 68.0
 }: MeshProps) {
   let gltf: any = null
   try {
@@ -516,14 +521,20 @@ function DashboardHumanMesh({
     [[0.15, 0.52, 0.03], [0.13, 0.08, 0.02]]
   ]
 
+  // Morphological weight factor
+  const baseWeight = 68.0
+  const wRatio = Math.max(35, weight || baseWeight) / baseWeight
+  const widthFactor = Math.pow(wRatio, 0.46)
+  const depthFactor = Math.pow(wRatio, 0.52)
+
   return (
     <group position={[0, 0, 0]}>
       {/* 3D Human Model */}
       {clonedScene ? (
-        <primitive object={clonedScene} position={[0, 0, 0]} scale={[1, 1, 1]} />
+        <primitive object={clonedScene} position={[0, 0, 0]} scale={[depthFactor, 1, widthFactor]} />
       ) : (
         /* Procedural Mannequin Fallback if GLB not yet loaded */
-        <ProceduralMannequin layer={layer} />
+        <ProceduralMannequin layer={layer} widthFactor={widthFactor} depthFactor={depthFactor} />
       )}
 
       {/* Plumb Line (Central Gravity Line) */}
@@ -628,12 +639,20 @@ function DashboardHumanMesh({
   )
 }
 
-function ProceduralMannequin({ layer }: { layer: ActiveLayer }) {
+function ProceduralMannequin({
+  layer,
+  widthFactor = 1,
+  depthFactor = 1
+}: {
+  layer: ActiveLayer
+  widthFactor?: number
+  depthFactor?: number
+}) {
   const color = layer === 'hologram' ? '#00ffd5' : layer === 'thermal' ? '#f97316' : '#d97706'
   const isWireframe = layer === 'hologram'
 
   return (
-    <group position={[0, 0, 0]}>
+    <group position={[0, 0, 0]} scale={[widthFactor, 1, depthFactor]}>
       {/* Head */}
       <mesh position={[0, 1.62, 0]}>
         <sphereGeometry args={[0.11, 24, 24]} />

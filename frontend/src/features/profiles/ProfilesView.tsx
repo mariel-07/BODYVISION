@@ -8,11 +8,18 @@ import { api, Profile, Consent } from '../../services/api'
 interface ProfilesViewProps {
   profiles: Profile[]
   initialProfileId?: number | null
+  onSelectProfile?: (id: number) => void
   onRefresh: () => void
   onNavigate: (section: string, profileId?: number) => void
 }
 
-export const ProfilesView: React.FC<ProfilesViewProps> = ({ profiles, initialProfileId, onRefresh, onNavigate }) => {
+export const ProfilesView: React.FC<ProfilesViewProps> = ({
+  profiles,
+  initialProfileId,
+  onSelectProfile,
+  onRefresh,
+  onNavigate
+}) => {
   const [selectedProfileId, setSelectedProfileId] = useState<number | null>(
     initialProfileId || (profiles.length > 0 ? profiles[0].id : null)
   )
@@ -25,14 +32,14 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({ profiles, initialPro
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
 
-  // Sincronizar selección cuando cambia initialProfileId o cargan los expedientes
+  // Sincronizar selección cuando cambia initialProfileId desde el contenedor global
   useEffect(() => {
-    if (initialProfileId) {
+    if (initialProfileId && initialProfileId !== selectedProfileId) {
       setSelectedProfileId(initialProfileId)
     } else if (!selectedProfileId && profiles.length > 0) {
       setSelectedProfileId(profiles[0].id)
     }
-  }, [initialProfileId, profiles, selectedProfileId])
+  }, [initialProfileId, profiles])
 
   // Load consents for selected profile
   useEffect(() => {
@@ -58,8 +65,9 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({ profiles, initialPro
       setCode('')
       setName('')
       setNotice(`Expediente ${created.display_code} registrado exitosamente.`)
-      onRefresh()
       setSelectedProfileId(created.id)
+      if (onSelectProfile) onSelectProfile(created.id)
+      onRefresh()
     } catch (err) {
       setError((err as Error).message)
     }
@@ -190,7 +198,10 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({ profiles, initialPro
                     <div
                       key={p.id}
                       className={`profile-card ${isSelected ? 'selected' : ''}`}
-                      onClick={() => setSelectedProfileId(p.id)}
+                      onClick={() => {
+                        setSelectedProfileId(p.id)
+                        if (onSelectProfile) onSelectProfile(p.id)
+                      }}
                     >
                       <div className="avatar">
                         <CircleUserRound size={20} />

@@ -3,7 +3,7 @@ import {
   Users, Activity, Radio, Award, ArrowUpRight, ChevronRight,
   Sparkles, Flame, Layers, ShieldCheck, FileText, Settings,
   AlertTriangle, Archive, Camera, ScanFace, Cuboid, SlidersHorizontal,
-  CheckCircle2, RefreshCw
+  CheckCircle2, RefreshCw, UserCheck
 } from 'lucide-react'
 import { Profile, DashboardStats } from '../../services/api'
 import { Dashboard3DViewer, ActiveLayer } from './Dashboard3DViewer'
@@ -14,14 +14,30 @@ import { ClinicalRecommendations } from './ClinicalRecommendations'
 interface DashboardViewProps {
   profiles: Profile[]
   stats: DashboardStats | null
+  activeProfileId?: number | null
+  onSelectProfile?: (id: number) => void
   onNavigate: (section: string) => void
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({ profiles, stats, onNavigate }) => {
-  // Active selected patient/profile
+export const DashboardView: React.FC<DashboardViewProps> = ({
+  profiles,
+  stats,
+  activeProfileId,
+  onSelectProfile,
+  onNavigate
+}) => {
+  // Synchronized active patient
   const [selectedProfileId, setSelectedProfileId] = useState<number | string>(
-    profiles.length > 0 ? profiles[0].id : 'demo'
+    activeProfileId || (profiles.length > 0 ? profiles[0].id : 'demo')
   )
+
+  useEffect(() => {
+    if (activeProfileId && activeProfileId !== selectedProfileId) {
+      setSelectedProfileId(activeProfileId)
+    } else if (!selectedProfileId && profiles.length > 0) {
+      setSelectedProfileId(profiles[0].id)
+    }
+  }, [activeProfileId, profiles])
 
   // Active layer state synchronized across 3D, biometrics & thermal map
   const [activeLayer, setActiveLayer] = useState<ActiveLayer>('hologram')
@@ -29,57 +45,59 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ profiles, stats, o
   // Selected anatomical hotspot synchronized across 3D, biometrics & thermal map
   const [selectedHotspot, setSelectedHotspot] = useState<string | null>('cervical')
 
-  // Calculate top KPI numbers (prioritizing user requirements with dynamic backend data)
+  // Calculate top KPI numbers
   const patientCount = stats ? (stats.profiles_count > 0 ? stats.profiles_count : 247) : 247
   const sessionsCount = stats ? (stats.measurements_count > 0 ? stats.measurements_count * 4 + 1428 : 1428) : 1428
   const sensorsConnected = 892
   const sensorEfficiency = 98.7
   const globalScore = 68.4
 
-  // Get current patient display name
-  const currentProfile = profiles.find(p => p.id === Number(selectedProfileId))
-  const patientDisplayName = currentProfile ? currentProfile.display_name : 'Mateo Silva (EXP-2026-08)'
+  // Active Profile details
+  const currentProfile = profiles.find(p => p.id === Number(selectedProfileId)) || profiles[0]
+  const patientDisplayName = currentProfile ? currentProfile.display_name : 'Elena Rostova (EXP-2026-0001)'
+  const patientCode = currentProfile ? currentProfile.display_code : 'BV-2026-0001'
 
   return (
     <div className="dashboard-enterprise-wrap">
-      {/* Top Welcome & Patient Selector Strip */}
-      <div className="dash-top-hero">
-        <div className="hero-text-area">
-          <div className="hero-badge">
-            <span className="dot pulse" /> CENTRO DE CONTROL BIOMECÁNICO &amp; CLÍNICO V3.0
+      {/* Executive Clean Header & Patient Selector */}
+      <div className="dash-executive-header">
+        <div className="exec-title-block">
+          <div className="exec-badge">
+            <span className="dot pulse" /> CENTRO DE CONTROL CLÍNICO Y BIOMECÁNICO V3.0
           </div>
-          <h2>
-            Inteligencia postural y mapas térmicos,<br />
-            <em>diagnóstico integral en tiempo real.</em>
-          </h2>
+          <h2>Panel de Evaluación Corporal y Termografía</h2>
           <p>
-            Plataforma médica unificada: Proyección anatómica 3D, termografía infrarroja de superficie,
-            análisis cinemático y volumetría de composición corporal.
+            Plataforma unificada para telemetría cinemática 3D, termografía infrarroja y volumetría de composición corporal.
           </p>
         </div>
 
-        {/* Patient Switcher in Header */}
-        <div className="hero-patient-selector">
-          <label className="patient-select-lbl">
-            <b>PACIENTE EN EVALUACIÓN:</b>
-            <select
-              value={selectedProfileId}
-              onChange={(e) => setSelectedProfileId(e.target.value)}
-              className="select-patient-dropdown"
-            >
-              <option value="demo">VAL-8491 — Mateo Silva (32a · Caso Activo)</option>
-              {profiles.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.display_code} — {p.display_name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="patient-quick-meta">
-            <span>Estatura: <b>174 cm</b></span>
-            <span>Peso: <b>71 kg</b></span>
-            <span>IMC: <b style={{ color: '#00ffd5' }}>23.4</b></span>
-            <span className="status-live-tag">EN VIVO</span>
+        {/* Streamlined Patient Card in Header */}
+        <div className="exec-patient-card">
+          <div className="patient-card-top">
+            <span className="card-lbl">PACIENTE SELECCIONADO</span>
+            <span className="badge-ok">ACTIVO</span>
+          </div>
+          <select
+            value={selectedProfileId}
+            onChange={(e) => {
+              const val = e.target.value
+              setSelectedProfileId(val)
+              if (val !== 'demo' && onSelectProfile) {
+                onSelectProfile(Number(val))
+              }
+            }}
+            className="exec-patient-select"
+          >
+            {profiles.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.display_code} — {p.display_name}
+              </option>
+            ))}
+          </select>
+          <div className="patient-mini-meta">
+            <span>Estatura: <b>172 cm</b></span>
+            <span>Peso: <b>68 kg</b></span>
+            <span>IMC: <b style={{ color: '#0d9488' }}>23.0</b></span>
           </div>
         </div>
       </div>
@@ -92,10 +110,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ profiles, stats, o
         <div className="dash-kpi-card" onClick={() => onNavigate('Expedientes')}>
           <div className="kpi-card-header">
             <div className="kpi-icon-wrap user-icon">
-              <Users size={20} />
+              <Users size={18} />
             </div>
             <span className="kpi-trend up">
-              <ArrowUpRight size={14} /> +18 este mes
+              <ArrowUpRight size={13} /> +18 este mes
             </span>
           </div>
           <span className="kpi-title">Pacientes / Evaluados</span>
@@ -112,10 +130,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ profiles, stats, o
         <div className="dash-kpi-card" onClick={() => onNavigate('Mediciones')}>
           <div className="kpi-card-header">
             <div className="kpi-icon-wrap session-icon">
-              <Activity size={20} />
+              <Activity size={18} />
             </div>
             <span className="kpi-trend up">
-              <ArrowUpRight size={14} /> +142 este periodo
+              <ArrowUpRight size={13} /> +142 este periodo
             </span>
           </div>
           <span className="kpi-title">Sesiones o Evaluaciones Realizadas</span>
@@ -132,7 +150,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ profiles, stats, o
         <div className="dash-kpi-card">
           <div className="kpi-card-header">
             <div className="kpi-icon-wrap sensor-icon">
-              <Radio size={20} />
+              <Radio size={18} />
             </div>
             <span className="kpi-efficiency-badge">
               {sensorEfficiency}% EFICIENCIA
@@ -152,13 +170,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ profiles, stats, o
         <div className="dash-kpi-card highlight-card">
           <div className="kpi-card-header">
             <div className="kpi-icon-wrap score-icon">
-              <Award size={20} />
+              <Award size={18} />
             </div>
             <span className="kpi-score-badge">Nivel General</span>
           </div>
           <span className="kpi-title">Cumplimiento Biomecánico Global</span>
           <div className="kpi-value-row">
-            <strong className="kpi-number" style={{ color: '#00ffd5' }}>{globalScore}%</strong>
+            <strong className="kpi-number" style={{ color: '#0d9488' }}>{globalScore}%</strong>
             <span className="kpi-unit">score global</span>
           </div>
           <div className="kpi-footer-sub">
@@ -209,7 +227,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ profiles, stats, o
       {/* ============================================================ */}
       {/* 3. MÓDULO DE RECOMENDACIONES CLÍNICAS Y DEL CASO             */}
       {/* ============================================================ */}
-      <div className="dash-recomms-wrapper" style={{ marginTop: '20px' }}>
+      <div className="dash-recomms-wrapper" style={{ marginTop: '16px' }}>
         <ClinicalRecommendations
           selectedHotspot={selectedHotspot}
           activeLayer={activeLayer}
@@ -220,34 +238,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ profiles, stats, o
       {/* ============================================================ */}
       {/* 4. ACCESOS RÁPIDOS A MÓDULOS DEL SISTEMA                    */}
       {/* ============================================================ */}
-      <section className="panel" style={{ marginTop: '20px' }}>
+      <section className="panel" style={{ marginTop: '16px' }}>
         <div className="panel-title">
           <div>
-            <h3>Navegación Rápida a Módulos Especializados</h3>
-            <p>Interconexión directa de los datos biomecánicos, capturas y reportes clínicos</p>
+            <h3>Navegación Rápida a Módulos Clínicos</h3>
+            <p>Interconexión directa de los datos biomecánicos, capturas y reportes médicos</p>
           </div>
-          <span className="badge-live">9 MÓDULOS VINCULADOS</span>
+          <span className="badge-live">9 MÓDULOS DISPONIBLES</span>
         </div>
         <div className="launchpad-grid">
           {[
             { id: 'Expedientes', name: 'Expedientes', desc: 'Ficha clínica y consentimientos', icon: Archive },
             { id: 'Mediciones', name: 'Mediciones', desc: 'Catálogo de biomarcadores y BIA', icon: Activity },
-            { id: 'Captura', name: 'Captura Segura', desc: 'Encuadre asistido y hashing SHA-256', icon: Camera },
+            { id: 'Captura', name: 'Captura Segura', desc: 'Tríada fotográfica y hashing', icon: Camera },
             { id: 'Análisis IA', name: 'Análisis Pose IA', desc: 'Estimación MediaPipe 33 landmarks', icon: ScanFace },
-            { id: 'Visor 3D', name: 'Visor 3D Completo', desc: 'Topología 50K quads y cinemática', icon: Cuboid },
+            { id: 'Visor 3D', name: 'Visor 3D Completo', desc: 'Adaptación de peso en tiempo real', icon: Cuboid },
             { id: 'Simulador', name: 'Simulador Hipotético', desc: 'Escenarios y evolución predictiva', icon: SlidersHorizontal },
-            { id: 'Reportes', name: 'Reportes de Evolución', desc: 'Exportación con firma y trazabilidad', icon: FileText },
+            { id: 'Reportes', name: 'Reportes de Evolución', desc: 'Exportación con firma digital', icon: FileText },
             { id: 'Administración', name: 'Admin & Auditoría', desc: 'RBAC y registros de seguridad', icon: Settings },
           ].map(m => {
             const Icon = m.icon
             return (
               <button key={m.id} className="launchpad-card" onClick={() => onNavigate(m.id)}>
-                <div className="launchpad-icon"><Icon size={20} /></div>
+                <div className="launchpad-icon"><Icon size={18} /></div>
                 <div className="launchpad-info">
                   <b>{m.name}</b>
                   <span>{m.desc}</span>
                 </div>
-                <ChevronRight size={16} className="arrow" />
+                <ChevronRight size={14} className="arrow" />
               </button>
             )
           })}
@@ -255,8 +273,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ profiles, stats, o
       </section>
 
       {/* Compliance Disclaimer */}
-      <div className="compliance-banner" style={{ marginTop: '16px' }}>
-        <AlertTriangle size={16} color="#e5a93c" />
+      <div className="compliance-banner" style={{ marginTop: '14px' }}>
+        <AlertTriangle size={15} color="#d97706" />
         <div>
           <b>Aviso de Cumplimiento Clínico &amp; Trazabilidad:</b> BODYVISION AI es una plataforma de telemetría postural, termográfica y volumétrica asistida. Todos los índices y porcentajes reflejados corresponden a mediciones cuantitativas no invasivas con trazabilidad y consentimientos bajo Ley 29733 y RGPD.
         </div>

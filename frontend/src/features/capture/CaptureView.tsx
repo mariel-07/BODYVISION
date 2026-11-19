@@ -1,114 +1,97 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
-  Camera, Upload, ShieldCheck, AlertTriangle, CheckCircle2,
-  Lock, RefreshCw, FileImage, Hash, Eye, ArrowRight, ShieldAlert,
-  Video, VideoOff
+  Camera, Upload, ShieldCheck, ShieldAlert, CheckCircle2,
+  AlertTriangle, Lock, Eye, Video, VideoOff, Layers, ArrowRight,
+  RefreshCw, Check, Sparkles, Image as ImageIcon
 } from 'lucide-react'
-import { api, Profile, Consent, MediaAsset } from '../../services/api'
+import { api, Profile, MediaAsset, Consent } from '../../services/api'
 
 interface CaptureViewProps {
   profiles: Profile[]
   initialProfileId?: number | null
+  onSelectProfile?: (id: number) => void
   onNavigate: (section: string, profileId?: number, mediaId?: number) => void
 }
 
-export const CaptureView: React.FC<CaptureViewProps> = ({ profiles, initialProfileId, onNavigate }) => {
+type ViewType = 'frontal' | 'lateral' | 'posterior'
+
+interface PerspectiveSlot {
+  viewType: ViewType
+  title: string
+  subtitle: string
+  file: File | null
+  previewUrl: string | null
+  checksum: string
+  assetId?: number
+  isReady: boolean
+}
+
+export const CaptureView: React.FC<CaptureViewProps> = ({
+  profiles,
+  initialProfileId,
+  onSelectProfile,
+  onNavigate
+}) => {
   const [selectedProfileId, setSelectedProfileId] = useState<number | ''>(
     initialProfileId || (profiles.length > 0 ? profiles[0].id : '')
   )
-  const [viewType, setViewType] = useState<'frontal' | 'lateral' | 'posterior'>('frontal')
   const [activeConsent, setActiveConsent] = useState<Consent | null>(null)
   const [mediaList, setMediaList] = useState<MediaAsset[]>([])
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [checksum, setChecksum] = useState<string>('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
 
-  // Quality checks state
-  const [qualityChecks, setQualityChecks] = useState({
-    lighting: true,
-    fullBody: true,
-    neutralBackground: true,
-    neutralPose: true,
+  // 3-View Photography Session State (Frontal, Lateral, Posterior)
+  const [slots, setSlots] = useState<Record<ViewType, PerspectiveSlot>>({
+    frontal: {
+      viewType: 'frontal',
+      title: 'Vista Frontal',
+      subtitle: 'Plano Coronal · Eje Biacromial y Nivel Pélvico',
+      file: null,
+      previewUrl: null,
+      checksum: '',
+      isReady: false
+    },
+    lateral: {
+      viewType: 'lateral',
+      title: 'Vista Lateral',
+      subtitle: 'Plano Sagital · Plomada y Cifosis/Lordosis',
+      file: null,
+      previewUrl: null,
+      checksum: '',
+      isReady: false
+    },
+    posterior: {
+      viewType: 'posterior',
+      title: 'Vista Posterior',
+      subtitle: 'Plano Dorsal · Simetría Escapular y Columna',
+      file: null,
+      previewUrl: null,
+      checksum: '',
+      isReady: false
+    }
   })
 
-  // Webcam live stream state
-  const [useWebcam, setUseWebcam] = useState(false)
+  // Webcam live capture state
+  const [activeWebcamSlot, setActiveWebcamSlot] = useState<ViewType | null>(null)
   const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // Webcam activation
-  async function startWebcam() {
-    setError('')
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
-      })
-      setWebcamStream(stream)
-      setUseWebcam(true)
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-      }
-    } catch {
-      setError('No se pudo acceder a la cámara web. Verifique los permisos en el navegador o utilice la carga por archivo.')
-    }
+  // File input refs for each view
+  const inputRefs = {
+    frontal: useRef<HTMLInputElement>(null),
+    lateral: useRef<HTMLInputElement>(null),
+    posterior: useRef<HTMLInputElement>(null)
   }
 
-  function stopWebcam() {
-    if (webcamStream) {
-      webcamStream.getTracks().forEach(t => t.stop())
-      setWebcamStream(null)
-    }
-    setUseWebcam(false)
-  }
-
-  // Cleanup webcam stream on unmount
+  // Synchronize profile selection without resetting local user changes
   useEffect(() => {
-    return () => {
-      if (webcamStream) {
-        webcamStream.getTracks().forEach(t => t.stop())
-      }
-    }
-  }, [webcamStream])
-
-  // Attach stream to video tag whenever videoRef mounts
-  useEffect(() => {
-    if (useWebcam && videoRef.current && webcamStream) {
-      videoRef.current.srcObject = webcamStream
-    }
-  }, [useWebcam, webcamStream])
-
-  // Capture frame snapshot from live video stream
-  async function handleCaptureFromWebcam() {
-    if (!videoRef.current) return
-    const video = videoRef.current
-    const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth || 1280
-    canvas.height = video.videoHeight || 720
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-    canvas.toBlob(async (blob) => {
-      if (!blob) return
-      const file = new File([blob], `live_scan_${viewType}_${Date.now()}.jpg`, { type: 'image/jpeg' })
-      await handleFileSelected(file)
-      stopWebcam()
-      setNotice('Captura en tiempo real tomada de la cámara con éxito.')
-    }, 'image/jpeg', 0.95)
-  }
-
-  // Sincronizar selección de perfil
-  useEffect(() => {
-    if (initialProfileId) {
+    if (initialProfileId && initialProfileId !== selectedProfileId) {
       setSelectedProfileId(initialProfileId)
     } else if (!selectedProfileId && profiles.length > 0) {
       setSelectedProfileId(profiles[0].id)
     }
-  }, [initialProfileId, profiles, selectedProfileId])
+  }, [initialProfileId, profiles])
 
   // Load consents and media when profile changes
   useEffect(() => {
@@ -130,83 +113,177 @@ export const CaptureView: React.FC<CaptureViewProps> = ({ profiles, initialProfi
   const loadMedia = () => {
     if (selectedProfileId) {
       api.media(Number(selectedProfileId))
-        .then(setMediaList)
+        .then(list => {
+          setMediaList(list)
+          // Pre-populate slots if already uploaded in DB
+          setSlots(prev => {
+            const next = { ...prev }
+            ;(['frontal', 'lateral', 'posterior'] as ViewType[]).forEach(vt => {
+              const found = list.find(m => m.view_type === vt)
+              if (found) {
+                next[vt] = {
+                  ...next[vt],
+                  isReady: true,
+                  assetId: found.id,
+                  checksum: found.checksum
+                }
+              }
+            })
+            return next
+          })
+        })
         .catch(() => setMediaList([]))
     }
   }
 
-  // Handle file selection and compute real SHA-256
-  async function handleFileSelected(file: File) {
+  // Compute SHA-256 and store preview
+  async function handleFileSelectedForSlot(vt: ViewType, file: File) {
     setError('')
     setNotice('')
-    // Validate MIME
     const allowed = ['image/jpeg', 'image/png', 'image/webp']
     if (!allowed.includes(file.type)) {
-      setError('Formato inválido. Solo se admiten archivos JPEG, PNG o WebP.')
+      setError(`Formato inválido para ${vt}. Solo se admiten archivos JPEG, PNG o WebP.`)
       return
     }
-    // Validate Size (10MB max)
     if (file.size > 10 * 1024 * 1024) {
-      setError('El archivo supera el límite máximo permitido de 10 MB.')
+      setError(`El archivo supera el límite máximo permitido de 10 MB.`)
       return
     }
 
-    setSelectedFile(file)
-    setPreviewUrl(URL.createObjectURL(file))
-    setIsProcessing(true)
-
+    const preview = URL.createObjectURL(file)
+    // Compute SHA-256
+    let hashHex = ''
     try {
-      // Compute SHA-256 via Web Crypto API
       const buffer = await file.arrayBuffer()
       const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
-      const hashArray = Array.from(new Uint8Array(hashBuffer))
-      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-      setChecksum(hashHex)
+      hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
     } catch {
-      setChecksum(`sha256_${Date.now()}_simulated`)
-    } finally {
-      setIsProcessing(false)
+      hashHex = `sha256_${Date.now()}`
+    }
+
+    // Save image in session storage for PoseAnalysisView overlay
+    try {
+      const reader = new FileReader()
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          sessionStorage.setItem(`bv_img_${selectedProfileId}_${vt}`, reader.result)
+        }
+      }
+      reader.readAsDataURL(file)
+    } catch (e) {
+      // Ignore storage errors
+    }
+
+    setSlots(prev => ({
+      ...prev,
+      [vt]: {
+        ...prev[vt],
+        file,
+        previewUrl: preview,
+        checksum: hashHex,
+        isReady: true
+      }
+    }))
+
+    // Auto-register to backend if consent is active
+    if (selectedProfileId && activeConsent) {
+      try {
+        const storageKey = `profiles/${selectedProfileId}/captures/${vt}_${Date.now()}.jpg`
+        const reg = await api.registerMedia(Number(selectedProfileId), {
+          storage_key: storageKey,
+          view_type: vt,
+          mime: file.type,
+          checksum: hashHex
+        })
+        setSlots(prev => ({
+          ...prev,
+          [vt]: { ...prev[vt], assetId: reg.id }
+        }))
+        setNotice(`Vista ${vt.toUpperCase()} registrada y asegurada con SHA-256.`)
+        loadMedia()
+      } catch (err) {
+        setError((err as Error).message)
+      }
     }
   }
 
-  // Handle registration
-  async function handleRegisterUpload(e: React.FormEvent) {
-    e.preventDefault()
-    if (!selectedProfileId || !selectedFile || !activeConsent) return
-    setIsProcessing(true)
+  // Webcam activation for a specific slot
+  async function startWebcamForSlot(vt: ViewType) {
     setError('')
     try {
-      const storageKey = `profiles/${selectedProfileId}/captures/${viewType}_${Date.now()}.jpg`
-      await api.registerMedia(Number(selectedProfileId), {
-        storage_key: storageKey,
-        view_type: viewType,
-        mime: selectedFile.type,
-        checksum: checksum || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
       })
-      setNotice('Captura procesada, saneada de EXIF y almacenada de forma privada.')
-      setSelectedFile(null)
-      setPreviewUrl(null)
-      setChecksum('')
-      loadMedia()
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setIsProcessing(false)
+      setWebcamStream(stream)
+      setActiveWebcamSlot(vt)
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+      }
+    } catch {
+      setError('No se pudo acceder a la cámara web. Verifique los permisos en el navegador o utilice la carga por archivo.')
     }
   }
+
+  function stopWebcam() {
+    if (webcamStream) {
+      webcamStream.getTracks().forEach(t => t.stop())
+      setWebcamStream(null)
+    }
+    setActiveWebcamSlot(null)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (webcamStream) {
+        webcamStream.getTracks().forEach(t => t.stop())
+      }
+    }
+  }, [webcamStream])
+
+  useEffect(() => {
+    if (activeWebcamSlot && videoRef.current && webcamStream) {
+      videoRef.current.srcObject = webcamStream
+    }
+  }, [activeWebcamSlot, webcamStream])
+
+  function handleCaptureFromWebcam() {
+    if (!videoRef.current || !activeWebcamSlot) return
+    const video = videoRef.current
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth || 1280
+    canvas.height = video.videoHeight || 720
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    canvas.toBlob(async (blob) => {
+      if (!blob) return
+      const file = new File([blob], `live_${activeWebcamSlot}_${Date.now()}.jpg`, { type: 'image/jpeg' })
+      const vt = activeWebcamSlot
+      stopWebcam()
+      await handleFileSelectedForSlot(vt, file)
+      setNotice(`Fotograma en vivo capturado para la vista ${vt.toUpperCase()}.`)
+    }, 'image/jpeg', 0.95)
+  }
+
+  const readyCount = (['frontal', 'lateral', 'posterior'] as ViewType[]).filter(vt => slots[vt].isReady).length
+  const primaryReadyAssetId = slots.frontal.assetId || slots.lateral.assetId || slots.posterior.assetId || (mediaList.length > 0 ? mediaList[0].id : undefined)
 
   return (
     <div className="capture-view">
       {notice && <div className="alert success">{notice}</div>}
       {error && <div className="alert error">{error}</div>}
 
-      {/* Profile Bar */}
+      {/* Profile Selector Bar */}
       <div className="profile-selector-bar">
         <label>
           <b>Expediente para Captura:</b>
           <select
             value={selectedProfileId}
-            onChange={e => setSelectedProfileId(e.target.value ? Number(e.target.value) : '')}
+            onChange={e => {
+              const val = e.target.value ? Number(e.target.value) : ''
+              setSelectedProfileId(val)
+              if (val && onSelectProfile) onSelectProfile(Number(val))
+            }}
           >
             <option value="">-- Seleccionar expediente --</option>
             {profiles.map(p => (
@@ -214,15 +291,22 @@ export const CaptureView: React.FC<CaptureViewProps> = ({ profiles, initialProfi
             ))}
           </select>
         </label>
-        {activeConsent ? (
-          <span className="badge-consent-ok">
-            <ShieldCheck size={14} /> Consentimiento Vigente ({activeConsent.version})
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {activeConsent ? (
+            <span className="badge-consent-ok">
+              <ShieldCheck size={14} /> Consentimiento Vigente Ley 29733
+            </span>
+          ) : (
+            <span className="badge-consent-bad">
+              <ShieldAlert size={14} /> Consentimiento Inactivo o Revocado
+            </span>
+          )}
+
+          <span className="badge-live">
+            {readyCount} DE 3 VISTAS CAPTURADAS
           </span>
-        ) : (
-          <span className="badge-consent-bad">
-            <ShieldAlert size={14} /> Consentimiento Inactivo o Revocado
-          </span>
-        )}
+        </div>
       </div>
 
       {!activeConsent && selectedProfileId && (
@@ -241,286 +325,179 @@ export const CaptureView: React.FC<CaptureViewProps> = ({ profiles, initialProfi
         </div>
       )}
 
-      <div className="grid-two" style={{ marginTop: '16px' }}>
-        {/* Left: Silhouette Guided Framing & Dropzone */}
-        <section className="panel">
-          <div className="panel-title">
-            <div>
-              <h3>Guía de Captura y Encuadre Óptico</h3>
-              <p>Estandarización de perspectiva para análisis de landmarks</p>
-            </div>
-            <Camera size={18} color="#45cbbd" />
+      {/* TRI-PERSPECTIVE CAPTURE STUDIO: 3 VISTAS (FRONTAL, LATERAL, POSTERIOR) */}
+      <div className="panel" style={{ marginTop: '16px' }}>
+        <div className="panel-title">
+          <div>
+            <h3>Tríada Fotográfica de Evaluación Biomecánica (3 Vistas)</h3>
+            <p>Capture o cargue simultáneamente las perspectivas Frontal, Lateral y Posterior para un análisis 3D integral</p>
           </div>
 
-          {/* Mode Switcher: Static File vs Live Webcam Scan */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-            <button
-              type="button"
-              className={`btn-preset ${!useWebcam ? 'active' : ''}`}
-              style={{ flex: 1, justifyContent: 'center' }}
-              onClick={() => { stopWebcam(); }}
-            >
-              <Upload size={14} /> Carga por Archivo
-            </button>
-            <button
-              type="button"
-              className={`btn-preset ${useWebcam ? 'active' : ''}`}
-              style={{ flex: 1, justifyContent: 'center', borderColor: useWebcam ? '#00ffcc' : undefined }}
-              disabled={!activeConsent}
-              onClick={() => {
-                if (useWebcam) {
-                  stopWebcam()
-                } else {
-                  startWebcam()
-                }
-              }}
-            >
-              {useWebcam ? <VideoOff size={14} /> : <Video size={14} color="#00ffcc" />}
-              {useWebcam ? 'Desactivar Cámara' : 'Escáner Cámara en Vivo'}
-            </button>
-          </div>
-
-          {/* Perspective selector */}
-          <div className="view-type-tabs">
-            {(['frontal', 'lateral', 'posterior'] as const).map(vt => (
-              <button
-                key={vt}
-                className={`view-tab ${viewType === vt ? 'active' : ''}`}
-                onClick={() => setViewType(vt)}
-              >
-                {vt.toUpperCase()}
-              </button>
-            ))}
-          </div>
-
-          {/* Guide Overlay Container */}
-          <div
-            className={`capture-dropzone ${!activeConsent ? 'disabled' : ''}`}
-            onClick={() => !useWebcam && activeConsent && fileInputRef.current?.click()}
-          >
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="image/jpeg,image/png,image/webp"
-              style={{ display: 'none' }}
-              onChange={e => e.target.files?.[0] && handleFileSelected(e.target.files[0])}
-            />
-
-            {useWebcam ? (
-              <div className="preview-container" style={{ position: 'relative', width: '100%', height: '360px', overflow: 'hidden', background: '#000', borderRadius: '8px' }}>
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-                <SilhouetteGuide viewType={viewType} />
-                <div style={{ position: 'absolute', bottom: '12px', left: '0', right: '0', display: 'flex', justifyContent: 'center', gap: '8px', zIndex: 10 }}>
-                  <button
-                    type="button"
-                    className="primary"
-                    style={{ padding: '8px 16px', boxShadow: '0 4px 16px rgba(0,0,0,0.6)' }}
-                    onClick={(e) => { e.stopPropagation(); handleCaptureFromWebcam(); }}
-                  >
-                    <Camera size={15} /> Capturar Fotograma en Vivo
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-preset"
-                    style={{ background: 'rgba(10,20,30,0.85)' }}
-                    onClick={(e) => { e.stopPropagation(); stopWebcam(); }}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            ) : previewUrl ? (
-              <div className="preview-container">
-                <img src={previewUrl} alt="Preview" className="preview-img" />
-                <SilhouetteGuide viewType={viewType} />
-              </div>
-            ) : (
-              <div className="dropzone-empty">
-                <SilhouetteGuide viewType={viewType} />
-                <div className="dropzone-prompt">
-                  <Upload size={32} />
-                  <b>Haga clic o arrastre una imagen aquí</b>
-                  <span>Guía visual: {viewType.toUpperCase()} (JPEG, PNG, WebP &lt; 10MB)</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Hash & EXIF Sanitization Details */}
-          {selectedFile && (
-            <div className="sanitization-info">
-              <div className="info-row">
-                <FileImage size={14} />
-                <span>Archivo: <b>{selectedFile.name}</b> ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)</span>
-              </div>
-              <div className="info-row">
-                <Hash size={14} />
-                <span>Integridad SHA-256: <code>{checksum.slice(0, 24)}...</code></span>
-              </div>
-              <div className="info-row">
-                <ShieldCheck size={14} color="#38d39f" />
-                <span>Filtro de metadatos: Metadatos EXIF eliminados para resguardo de privacidad</span>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* Right: Validation Checklist and Upload Action */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <section className="panel">
-            <div className="panel-title">
-              <div>
-                <h3>Control de Calidad Previo al Procesamiento</h3>
-                <p>Verificación técnica antes de ejecutar estimación de pose</p>
-              </div>
-              <CheckCircle2 size={18} color="#45cbbd" />
-            </div>
-
-            <div className="checklist-group">
-              <label className="checkbox-item">
-                <input
-                  type="checkbox"
-                  checked={qualityChecks.lighting}
-                  onChange={e => setQualityChecks({ ...qualityChecks, lighting: e.target.checked })}
-                />
-                <div>
-                  <b>Iluminación Homogénea</b>
-                  <span>Sin sombras duras, destellos ni contraluces pronunciados.</span>
-                </div>
-              </label>
-              <label className="checkbox-item">
-                <input
-                  type="checkbox"
-                  checked={qualityChecks.fullBody}
-                  onChange={e => setQualityChecks({ ...qualityChecks, fullBody: e.target.checked })}
-                />
-                <div>
-                  <b>Cuerpo Completo Visible</b>
-                  <span>Desde la coronilla hasta los pies dentro de las guías de encuadre.</span>
-                </div>
-              </label>
-              <label className="checkbox-item">
-                <input
-                  type="checkbox"
-                  checked={qualityChecks.neutralBackground}
-                  onChange={e => setQualityChecks({ ...qualityChecks, neutralBackground: e.target.checked })}
-                />
-                <div>
-                  <b>Fondo Neutro con Contraste</b>
-                  <span>Pared despejada para facilitar la detección de silueta.</span>
-                </div>
-              </label>
-              <label className="checkbox-item">
-                <input
-                  type="checkbox"
-                  checked={qualityChecks.neutralPose}
-                  onChange={e => setQualityChecks({ ...qualityChecks, neutralPose: e.target.checked })}
-                />
-                <div>
-                  <b>Postura Anatómica Neutra</b>
-                  <span>Brazos ligeramente separados y mirada al horizonte.</span>
-                </div>
-              </label>
-            </div>
-
+          {readyCount > 0 && (
             <button
               className="primary"
-              style={{ width: '100%', marginTop: '16px' }}
-              disabled={!selectedFile || !activeConsent || isProcessing}
-              onClick={handleRegisterUpload}
+              onClick={() => onNavigate('Análisis IA', Number(selectedProfileId), primaryReadyAssetId)}
             >
-              <Lock size={15} /> Confirmar Carga Privada en Storage
+              <Sparkles size={15} /> Analizar Tríada en Pose IA ({readyCount}/3 listas) →
             </button>
-          </section>
+          )}
+        </div>
 
-          {/* Stored Assets for this Profile */}
-          <section className="panel" style={{ flex: 1 }}>
-            <div className="panel-title">
-              <div>
-                <h3>Imágenes Capturadas en Expediente</h3>
-                <p>{mediaList.length} activos en bóveda cifrada</p>
-              </div>
-              <button className="btn-icon-subtle" onClick={loadMedia} title="Actualizar">
-                <RefreshCw size={14} />
-              </button>
-            </div>
+        {/* 3 Perspectives Grid */}
+        <div className="tri-perspective-grid">
+          {(['frontal', 'lateral', 'posterior'] as ViewType[]).map((vt) => {
+            const slot = slots[vt]
+            const isWebcamActiveForThis = activeWebcamSlot === vt
 
-            {mediaList.length === 0 ? (
-              <div className="empty">Aún no hay capturas registradas para este expediente.</div>
-            ) : (
-              <div className="media-scroll-list">
-                {mediaList.map(item => (
-                  <div key={item.id} className="media-item-row">
-                    <div className="media-thumb-placeholder">
-                      <FileImage size={18} />
-                    </div>
-                    <div className="media-meta">
-                      <b>Vista {item.view_type.toUpperCase()}</b>
-                      <span>{new Date(item.uploaded_at).toLocaleString()}</span>
-                      <small>SHA: {item.checksum.slice(0, 16)}...</small>
-                    </div>
-                    <button
-                      className="btn-quick-run"
-                      onClick={() => onNavigate('Análisis IA', Number(selectedProfileId), item.id)}
-                    >
-                      Analizar Pose IA <ArrowRight size={13} />
-                    </button>
+            return (
+              <div key={vt} className={`perspective-slot-card ${slot.isReady ? 'ready' : ''}`}>
+                <div className="slot-header">
+                  <div>
+                    <span className="slot-badge">{vt.toUpperCase()}</span>
+                    <b>{slot.title}</b>
+                    <small>{slot.subtitle}</small>
                   </div>
-                ))}
+                  {slot.isReady ? (
+                    <span className="status-pill active" title="Captura registrada"><Check size={12} /> LISTA</span>
+                  ) : (
+                    <span className="status-pill restricted">PENDIENTE</span>
+                  )}
+                </div>
+
+                {/* Dropzone / Preview / Webcam Box */}
+                <div className="slot-preview-box">
+                  <input
+                    type="file"
+                    ref={inputRefs[vt]}
+                    accept="image/jpeg,image/png,image/webp"
+                    style={{ display: 'none' }}
+                    onChange={e => e.target.files?.[0] && handleFileSelectedForSlot(vt, e.target.files[0])}
+                  />
+
+                  {isWebcamActiveForThis ? (
+                    <div className="slot-webcam-active">
+                      <video ref={videoRef} autoPlay playsInline muted className="webcam-video-feed" />
+                      <div className="webcam-controls-overlay">
+                        <button type="button" className="primary btn-sm" onClick={handleCaptureFromWebcam}>
+                          <Camera size={13} /> Capturar Fotograma
+                        </button>
+                        <button type="button" className="btn-preset btn-sm" onClick={stopWebcam}>
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : slot.previewUrl ? (
+                    <div className="slot-img-wrap" onClick={() => activeConsent && inputRefs[vt].current?.click()}>
+                      <img src={slot.previewUrl} alt={slot.title} className="slot-preview-img" />
+                      <div className="slot-change-hover">
+                        <Upload size={16} /> Cambiar Imagen
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      className={`slot-drop-empty ${!activeConsent ? 'disabled' : ''}`}
+                      onClick={() => activeConsent && inputRefs[vt].current?.click()}
+                    >
+                      <SilhouettePreview viewType={vt} />
+                      <span className="drop-cta-text">Arrastre o haga clic para cargar {slot.title}</span>
+                      <small>JPEG, PNG o WebP</small>
+                    </div>
+                  )}
+                </div>
+
+                {/* Slot Action Buttons */}
+                <div className="slot-actions-row">
+                  <button
+                    type="button"
+                    className="btn-slot-action"
+                    disabled={!activeConsent}
+                    onClick={() => inputRefs[vt].current?.click()}
+                  >
+                    <Upload size={13} /> Cargar Archivo
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-slot-action"
+                    disabled={!activeConsent}
+                    onClick={() => {
+                      if (isWebcamActiveForThis) stopWebcam()
+                      else startWebcamForSlot(vt)
+                    }}
+                  >
+                    {isWebcamActiveForThis ? <VideoOff size={13} /> : <Video size={13} />}
+                    {isWebcamActiveForThis ? 'Detener' : 'Cámara Web'}
+                  </button>
+                </div>
+
+                {slot.checksum && (
+                  <div className="slot-checksum-badge">
+                    <span className="dot" /> SHA-256: {slot.checksum.substring(0, 16)}...
+                  </div>
+                )}
               </div>
-            )}
-          </section>
+            )
+          })}
         </div>
       </div>
+
+      {/* Historical Captures List for this Profile */}
+      <section className="panel" style={{ marginTop: '16px' }}>
+        <div className="panel-title">
+          <div>
+            <h3>Historial de Capturas de este Expediente</h3>
+            <p>{mediaList.length} capturas custodiadas en base de datos</p>
+          </div>
+        </div>
+
+        {mediaList.length === 0 ? (
+          <div className="empty">No hay capturas previas registradas para este expediente.</div>
+        ) : (
+          <div className="media-scroll-list">
+            {mediaList.map(m => (
+              <div key={m.id} className="media-item-row">
+                <div className="media-thumb-placeholder">
+                  <ImageIcon size={18} />
+                </div>
+                <div className="media-meta">
+                  <b>Captura #{m.id} — Vista {m.view_type.toUpperCase()}</b>
+                  <span>Subida el {new Date(m.uploaded_at).toLocaleString()} · Formato: {m.mime}</span>
+                  <small>SHA-256: {m.checksum}</small>
+                </div>
+                <button
+                  className="btn-quick-run"
+                  onClick={() => onNavigate('Análisis IA', Number(selectedProfileId), m.id)}
+                >
+                  <Sparkles size={12} /> Procesar en Pose IA
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }
 
-// SVG Silhouette Framing Guide
-function SilhouetteGuide({ viewType }: { viewType: string }) {
+function SilhouettePreview({ viewType }: { viewType: ViewType }) {
   return (
-    <svg className="silhouette-guide-svg" viewBox="0 0 200 320">
-      {/* Target Crosshairs / Alignment Lines */}
-      <line x1="20" y1="50" x2="180" y2="50" stroke="#3bd5c5" strokeWidth="0.8" strokeDasharray="3 3" opacity="0.6" />
-      <text x="185" y="53" fill="#3bd5c5" fontSize="7" opacity="0.8">Ojos</text>
-
-      <line x1="20" y1="80" x2="180" y2="80" stroke="#3bd5c5" strokeWidth="0.8" strokeDasharray="3 3" opacity="0.6" />
-      <text x="185" y="83" fill="#3bd5c5" fontSize="7" opacity="0.8">Hombros</text>
-
-      <line x1="20" y1="160" x2="180" y2="160" stroke="#3bd5c5" strokeWidth="0.8" strokeDasharray="3 3" opacity="0.6" />
-      <text x="185" y="163" fill="#3bd5c5" fontSize="7" opacity="0.8">Cadera</text>
-
-      <line x1="20" y1="280" x2="180" y2="280" stroke="#3bd5c5" strokeWidth="0.8" strokeDasharray="3 3" opacity="0.6" />
-      <text x="185" y="283" fill="#3bd5c5" fontSize="7" opacity="0.8">Tobillos</text>
-
-      {/* Silhouette Head */}
-      <circle cx="100" cy="40" r="16" fill="none" stroke="#3bd5c5" strokeWidth="1.2" strokeDasharray="4 2" opacity="0.5" />
-      
-      {/* Torso & Limbs outline based on view */}
-      {viewType === 'lateral' ? (
-        <path
-          d="M100 56 Q108 80 106 120 Q108 160 100 200 L98 280 M96 120 L94 200 L95 280"
-          fill="none"
-          stroke="#3bd5c5"
-          strokeWidth="1.2"
-          strokeDasharray="4 2"
-          opacity="0.5"
-        />
-      ) : (
-        <path
-          d="M84 75 Q100 70 116 75 L124 130 L115 160 L118 280 M84 75 L76 130 L85 160 L82 280 M100 160 L100 280"
-          fill="none"
-          stroke="#3bd5c5"
-          strokeWidth="1.2"
-          strokeDasharray="4 2"
-          opacity="0.5"
-        />
+    <svg width="70" height="110" viewBox="0 0 100 160" fill="none" opacity="0.4" style={{ margin: '8px auto' }}>
+      <circle cx="50" cy="18" r="11" stroke="#0d9488" strokeWidth="2" />
+      {viewType === 'frontal' && (
+        <>
+          <path d="M50 30 L50 90 M30 45 L70 45 M30 45 L20 85 M70 45 L80 85 M50 90 L34 145 M50 90 L66 145" stroke="#0d9488" strokeWidth="2.5" strokeLinecap="round" />
+        </>
+      )}
+      {viewType === 'lateral' && (
+        <>
+          <path d="M46 30 C56 45 44 70 50 90 M50 45 L40 85 M50 90 L45 145" stroke="#0d9488" strokeWidth="2.5" strokeLinecap="round" />
+        </>
+      )}
+      {viewType === 'posterior' && (
+        <>
+          <path d="M50 30 L50 90 M28 45 L72 45 M28 45 L18 85 M72 45 L82 85 M50 90 L34 145 M50 90 L66 145" stroke="#0d9488" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="38" y1="52" x2="44" y2="60" stroke="#0d9488" strokeWidth="2" />
+          <line x1="62" y1="52" x2="56" y2="60" stroke="#0d9488" strokeWidth="2" />
+        </>
       )}
     </svg>
   )

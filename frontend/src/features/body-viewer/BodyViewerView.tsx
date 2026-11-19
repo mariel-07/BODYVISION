@@ -19,23 +19,33 @@ useGLTF.preload('/models/human_body.glb')
 interface BodyViewerViewProps {
   profiles: Profile[]
   initialProfileId?: number | null
+  onSelectProfile?: (id: number) => void
 }
 
-export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initialProfileId }) => {
+export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initialProfileId, onSelectProfile }) => {
   const [selectedProfileId, setSelectedProfileId] = useState<number | ''>(
     initialProfileId || (profiles.length > 0 ? profiles[0].id : '')
   )
   const [measurements, setMeasurements] = useState<Measurement[]>([])
+
+  // Live Morphing & Body Resizing State (Real-Time Weight Simulation e.g. 150 kg)
+  const [liveWeight, setLiveWeight] = useState<number>(68.0)
+  const [liveHeight, setLiveHeight] = useState<number>(172.0)
+  const [liveWaist, setLiveWaist] = useState<number>(74.0)
+  const [liveFat, setLiveFat] = useState<number>(19.5)
+  const [liveChest, setLiveChest] = useState<number>(90.0)
+  const [liveHip, setLiveHip] = useState<number>(96.0)
+  const [savingMorphNotice, setSavingMorphNotice] = useState('')
 
   // Viewer Controls
   const [layer, setLayer] = useState<'clinical' | 'heatmap' | 'wireframe' | 'skeleton' | 'measurements' | 'surface'>('clinical')
   const [lighting, setLighting] = useState<'studio' | 'cyberpunk' | 'clinical'>('studio')
   const [autoRotate, setAutoRotate] = useState(false)
   const [cameraPreset, setCameraPreset] = useState<'front' | 'side_r' | 'side_l' | 'back' | 'perspective'>('perspective')
-  const [activeTab, setActiveTab] = useState<'mesh' | 'live_scan' | 'biomechanics' | 'tools'>('live_scan')
+  const [activeTab, setActiveTab] = useState<'morph' | 'mesh' | 'live_scan' | 'biomechanics' | 'tools'>('morph')
 
   // Real-Time 3D Full-Body Laser Scanner State
-  const [isLiveScanning, setIsLiveScanning] = useState(true)
+  const [isLiveScanning, setIsLiveScanning] = useState(false)
   const [autoScanSweep, setAutoScanSweep] = useState(true)
   const [laserY, setLaserY] = useState(1.05) // Current laser sweep elevation (0.03m to 1.75m)
   const [scanSpeed, setScanSpeed] = useState(1.0)
@@ -49,18 +59,32 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
 
   // Sincronizar selección de perfil
   useEffect(() => {
-    if (initialProfileId) {
+    if (initialProfileId && initialProfileId !== selectedProfileId) {
       setSelectedProfileId(initialProfileId)
     } else if (!selectedProfileId && profiles.length > 0) {
       setSelectedProfileId(profiles[0].id)
     }
-  }, [initialProfileId, profiles, selectedProfileId])
+  }, [initialProfileId, profiles])
 
   // Cargar mediciones del perfil activo
   useEffect(() => {
     if (selectedProfileId) {
       api.measurements(Number(selectedProfileId))
-        .then(setMeasurements)
+        .then(data => {
+          setMeasurements(data)
+          if (data.length > 0) {
+            const getVal = (mName: string, fb: number) => {
+              const f = data.find(m => m.metric.toLowerCase().includes(mName.toLowerCase()))
+              return f ? f.value : fb
+            }
+            setLiveHeight(getVal('Estatura', 172.0))
+            setLiveWeight(getVal('Peso', 68.0))
+            setLiveWaist(getVal('Cintura', 74.0))
+            setLiveHip(getVal('Cadera', 96.0))
+            setLiveChest(getVal('Tórax', 90.0))
+            setLiveFat(getVal('Grasa', 19.5))
+          }
+        })
         .catch(() => setMeasurements([]))
     } else {
       setMeasurements([])
@@ -133,7 +157,11 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
           <b>Expediente Biomecánico 3D:</b>
           <select
             value={selectedProfileId}
-            onChange={e => setSelectedProfileId(e.target.value ? Number(e.target.value) : '')}
+            onChange={e => {
+              const val = e.target.value ? Number(e.target.value) : ''
+              setSelectedProfileId(val)
+              if (val && onSelectProfile) onSelectProfile(Number(val))
+            }}
           >
             <option value="">-- Seleccionar expediente --</option>
             {profiles.map(p => (
@@ -144,7 +172,7 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <span className={`badge-live ${isLiveScanning ? 'active-scanner' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Radio size={14} className={isLiveScanning ? 'pulse-laser-icon' : ''} color={isLiveScanning ? '#00ffcc' : '#34d399'} />
-            {isLiveScanning ? 'ESCÁNER LiDAR 3D EN TIEMPO REAL (ACTIVO)' : 'TOPOLOGÍA 50K QUADS'}
+            {isLiveScanning ? 'ESCÁNER LiDAR 3D ACTIVO' : `PESO DINÁMICO: ${liveWeight} KG`}
           </span>
           <button className="btn-preset" onClick={handleCaptureSnapshot} title="Exportar captura clínica 3D en PNG">
             <Camera size={13} /> Captura 3D
@@ -155,19 +183,19 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
       <div className="viewer-layout" style={{ marginTop: '16px' }}>
         {/* 3D Canvas Area */}
         <div className="canvas-wrapper">
-          {/* Floating Metric HUD Overlay */}
+          {/* Floating Metric HUD Overlay with Real-time Adapted Weight */}
           <div className="viewer-floating-hud">
             <div className="hud-metric-pill">
               <span>Estatura:</span>
-              <b>{height} cm</b>
+              <b>{liveHeight} cm</b>
             </div>
             <div className="hud-metric-pill">
-              <span>Peso:</span>
-              <b>{weight} kg</b>
+              <span>Peso Observado / Simulado:</span>
+              <b style={{ color: liveWeight >= 100 ? '#ef4444' : liveWeight >= 85 ? '#f59e0b' : '#34d399' }}>{liveWeight} kg</b>
             </div>
             <div className="hud-metric-pill">
               <span>IMC:</span>
-              <b style={{ color: Number(bmi) < 25 ? '#34d399' : '#f59e0b' }}>{bmi} kg/m²</b>
+              <b style={{ color: Number(bmi) < 25 ? '#34d399' : Number(bmi) < 30 ? '#f59e0b' : '#ef4444' }}>{bmi} kg/m²</b>
             </div>
             <div className="hud-metric-pill">
               <span>ICC:</span>
@@ -284,7 +312,14 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
                 show3DCallouts={show3DCallouts}
                 showPointCloud={showPointCloud && isLiveScanning}
                 laserY={laserY}
-                measurements={{ height, chest, waist, hip, fat }}
+                measurements={{
+                  height: liveHeight,
+                  weight: liveWeight,
+                  chest: liveChest,
+                  waist: liveWaist,
+                  hip: liveHip,
+                  fat: liveFat
+                }}
               />
             </Suspense>
 
@@ -333,6 +368,12 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
           {/* Section Navigation Tabs */}
           <div className="admin-nav-tabs" style={{ margin: 0 }}>
             <button
+              className={`admin-tab ${activeTab === 'morph' ? 'active' : ''}`}
+              onClick={() => setActiveTab('morph')}
+            >
+              <Scale size={14} color="#0d9488" /> Morfología y Peso 3D
+            </button>
+            <button
               className={`admin-tab ${activeTab === 'live_scan' ? 'active' : ''}`}
               onClick={() => setActiveTab('live_scan')}
             >
@@ -357,6 +398,204 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
               <Crosshair size={14} /> Herramientas
             </button>
           </div>
+
+          {/* TAB 0: REAL-TIME MORPHOLOGY & WEIGHT SCALING (e.g. 150 kg adaptation) */}
+          {activeTab === 'morph' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <section className="panel">
+                <div className="panel-title">
+                  <div>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Scale size={16} color="#0d9488" /> Adaptación Corporal en Tiempo Real
+                    </h3>
+                    <p>Morfometría volumétrica 3D adaptada al peso del paciente</p>
+                  </div>
+                  <span className="badge-live">{liveWeight} KG</span>
+                </div>
+
+                {savingMorphNotice && <div className="alert success">{savingMorphNotice}</div>}
+
+                {/* Quick Weight Presets (Including 150 kg requested by user!) */}
+                <div style={{ marginBottom: '14px' }}>
+                  <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: '6px' }}>
+                    PRESETS DE PESO Y BIOTIPO:
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                    <button
+                      type="button"
+                      className={`btn-preset ${liveWeight === 52 ? 'active' : ''}`}
+                      onClick={() => {
+                        setLiveWeight(52)
+                        setLiveWaist(64)
+                        setLiveHip(86)
+                        setLiveFat(14)
+                      }}
+                    >
+                      52 kg · Ectomorfo
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-preset ${liveWeight === 68 ? 'active' : ''}`}
+                      onClick={() => {
+                        setLiveWeight(68)
+                        setLiveWaist(74)
+                        setLiveHip(96)
+                        setLiveFat(19.5)
+                      }}
+                    >
+                      68 kg · Normopeso
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-preset ${liveWeight === 92 ? 'active' : ''}`}
+                      onClick={() => {
+                        setLiveWeight(92)
+                        setLiveWaist(88)
+                        setLiveHip(106)
+                        setLiveFat(26.5)
+                      }}
+                    >
+                      92 kg · Sobrepeso
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-preset ${liveWeight === 150 ? 'active' : ''}`}
+                      style={{ borderColor: liveWeight === 150 ? '#ef4444' : undefined, color: liveWeight === 150 ? '#ef4444' : undefined }}
+                      onClick={() => {
+                        setLiveWeight(150)
+                        setLiveWaist(116)
+                        setLiveHip(130)
+                        setLiveFat(42)
+                      }}
+                    >
+                      150 kg · Obesidad III
+                    </button>
+                  </div>
+                </div>
+
+                {/* Interactive Sliders */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div className="slider-metric-row">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                      <b>Peso Corporal:</b>
+                      <strong style={{ color: liveWeight >= 100 ? '#ef4444' : '#0d9488' }}>{liveWeight} kg</strong>
+                    </div>
+                    <input
+                      type="range"
+                      min="40"
+                      max="160"
+                      step="1"
+                      value={liveWeight}
+                      onChange={e => {
+                        const val = Number(e.target.value)
+                        setLiveWeight(val)
+                        setLiveWaist(Math.round(74 + (val - 68) * 0.5))
+                      }}
+                      style={{ width: '100%' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#64748b' }}>
+                      <span>40 kg</span>
+                      <span>150 kg (Ejemplo)</span>
+                      <span>160 kg</span>
+                    </div>
+                  </div>
+
+                  <div className="slider-metric-row">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                      <b>Estatura:</b>
+                      <strong>{liveHeight} cm</strong>
+                    </div>
+                    <input
+                      type="range"
+                      min="140"
+                      max="210"
+                      step="1"
+                      value={liveHeight}
+                      onChange={e => setLiveHeight(Number(e.target.value))}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+
+                  <div className="slider-metric-row">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                      <b>Perímetro de Cintura:</b>
+                      <strong>{liveWaist} cm</strong>
+                    </div>
+                    <input
+                      type="range"
+                      min="50"
+                      max="140"
+                      step="1"
+                      value={liveWaist}
+                      onChange={e => setLiveWaist(Number(e.target.value))}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+
+                  <div className="slider-metric-row">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                      <b>% Grasa Corporal Estimada:</b>
+                      <strong>{liveFat}%</strong>
+                    </div>
+                    <input
+                      type="range"
+                      min="5"
+                      max="50"
+                      step="0.5"
+                      value={liveFat}
+                      onChange={e => setLiveFat(Number(e.target.value))}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Calculated BMI Badge & Save to Patient Button */}
+                <div style={{ marginTop: '16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <span style={{ fontSize: '9px', color: '#64748b', display: 'block' }}>ÍNDICE DE MASA CORPORAL RESULTANTE</span>
+                      <b style={{ fontSize: '18px', color: Number(bmi) >= 35 ? '#ef4444' : Number(bmi) >= 25 ? '#f59e0b' : '#0d9488' }}>
+                        {bmi} kg/m²
+                      </b>
+                    </div>
+                    <span className={`status-pill ${Number(bmi) >= 30 ? 'restricted' : Number(bmi) >= 25 ? 'archived' : 'active'}`}>
+                      {Number(bmi) >= 40 ? 'OBESIDAD CLASE III' : Number(bmi) >= 30 ? 'OBESIDAD' : Number(bmi) >= 25 ? 'SOBREPESO' : 'NORMOPESO'}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="primary"
+                    style={{ width: '100%', marginTop: '12px' }}
+                    onClick={async () => {
+                      if (!selectedProfileId) return
+                      try {
+                        await api.createMeasurement(Number(selectedProfileId), {
+                          metric: 'Peso Corporal',
+                          value: liveWeight,
+                          unit: 'kg',
+                          method: 'Báscula bioimpedancia / Ajuste 3D'
+                        })
+                        await api.createMeasurement(Number(selectedProfileId), {
+                          metric: 'Perímetro Cintura',
+                          value: liveWaist,
+                          unit: 'cm',
+                          method: 'Cinta métrica'
+                        })
+                        setSavingMorphNotice(`Registro de ${liveWeight} kg guardado en el expediente.`)
+                        setTimeout(() => setSavingMorphNotice(''), 4000)
+                        api.measurements(Number(selectedProfileId)).then(setMeasurements)
+                      } catch (err) {
+                        alert((err as Error).message)
+                      }
+                    }}
+                  >
+                    <CheckCircle2 size={14} /> Guardar Registro ({liveWeight} kg) en el Expediente
+                  </button>
+                </div>
+              </section>
+            </div>
+          )}
 
           {/* TAB 0: LIVE SCANNER CONTROLS */}
           {activeTab === 'live_scan' && (
@@ -825,9 +1064,27 @@ function RealisticHumanBody({
   show3DCallouts: boolean
   showPointCloud: boolean
   laserY: number
-  measurements: { height: number; chest: number; waist: number; hip: number; fat: number }
+  measurements: { height: number; weight: number; chest: number; waist: number; hip: number; fat: number }
 }) {
   const { scene } = useGLTF('/models/human_body.glb')
+
+  // Dynamic Biomechanical Morphing factors based on real or simulated weight (e.g. 150 kg)
+  const baseHeight = 172.0
+  const baseWeight = 68.0
+
+  const wRatio = (measurements.weight || baseWeight) / baseWeight
+  const hRatio = (measurements.height || baseHeight) / baseHeight
+  const waistRatio = (measurements.waist || 74.0) / 74.0
+
+  const widthFactor = Math.pow(wRatio, 0.46) * Math.pow(waistRatio, 0.22)
+  const depthFactor = Math.pow(wRatio, 0.52) * Math.pow(waistRatio, 0.28)
+  const heightFactor = hRatio
+
+  // With scene rotation [0, Math.PI / 2, 0]:
+  // Local X is world depth, Local Z is world width, Local Y is world height
+  const scaleX = 1.75 * depthFactor
+  const scaleZ = 1.75 * widthFactor
+  const scaleY = 1.75 * heightFactor
 
   // Heatmap Topographic Material using onBeforeCompile for clinical gradient
   const heatmapMaterial = useMemo(() => {
@@ -986,11 +1243,11 @@ function RealisticHumanBody({
 
   return (
     <group position={[0, 0, 0]}>
-      {/* Real Organic Human Body Mesh standing on floor (feet at Y=0, head at Y=1.75m) */}
+      {/* Real Organic Human Body Mesh standing on floor with dynamic scaling according to patient weight */}
       <primitive
         object={clonedScene}
-        position={[0, 0.876, 0]}
-        scale={[1.75, 1.75, 1.75]}
+        position={[0, 0.876 * heightFactor, 0]}
+        scale={[scaleX, scaleY, scaleZ]}
         rotation={[0, Math.PI / 2, 0]}
       />
 
@@ -998,8 +1255,8 @@ function RealisticHumanBody({
       {showPointCloud && bodyGeometry && (
         <points
           geometry={bodyGeometry}
-          position={[0, 0.876, 0]}
-          scale={[1.751, 1.751, 1.751]}
+          position={[0, 0.876 * heightFactor, 0]}
+          scale={[scaleX * 1.001, scaleY * 1.001, scaleZ * 1.001]}
           rotation={[0, Math.PI / 2, 0]}
         >
           <pointsMaterial
