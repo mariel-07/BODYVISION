@@ -77,7 +77,9 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
               const f = data.find(m => m.metric.toLowerCase().includes(mName.toLowerCase()))
               return f ? f.value : fb
             }
-            setLiveHeight(getVal('Estatura', 172.0))
+            const rawH = getVal('Estatura', 172.0)
+            const safeH = rawH < 3.0 ? Math.round(rawH * 100) : rawH
+            setLiveHeight(safeH >= 100 && safeH <= 250 ? safeH : 172.0)
             setLiveWeight(getVal('Peso', 68.0))
             setLiveWaist(getVal('Cintura', 74.0))
             setLiveHip(getVal('Cadera', 96.0))
@@ -128,19 +130,22 @@ export const BodyViewerView: React.FC<BodyViewerViewProps> = ({ profiles, initia
     return found ? found.value : fallback
   }
 
-  const height = getNumVal('Estatura', 172.0)
+  const rawHeight = getNumVal('Estatura', 172.0)
+  const height = rawHeight < 3.0 ? Math.round(rawHeight * 100) : rawHeight
   const weight = getNumVal('Peso', 68.0)
   const waist = getNumVal('Cintura', 74.0)
   const hip = getNumVal('Cadera', 96.0)
   const chest = getNumVal('Tórax', 90.0)
   const fat = getNumVal('Grasa', 19.5)
 
-  // Cálculos Biomecánicos y Antropométricos Clínicos
-  const heightM = height / 100
-  const bmi = (weight / (heightM * heightM)).toFixed(1)
-  const whr = (waist / hip).toFixed(2)
-  const bsa = Math.sqrt((height * weight) / 3600).toFixed(2)
-  const lbm = (0.407 * weight + 0.267 * height - 19.2).toFixed(1)
+  // Cálculos Biomecánicos y Antropométricos Clínicos dinámicos con liveWeight y liveHeight
+  const safeLiveHeight = liveHeight < 3.0 ? Math.round(liveHeight * 100) : (liveHeight || 172.0)
+  const safeLiveWeight = liveWeight > 20 && liveWeight < 350 ? liveWeight : 68.0
+  const heightM = safeLiveHeight / 100
+  const bmi = (safeLiveWeight / (heightM * heightM)).toFixed(1)
+  const whr = (liveWaist / liveHip).toFixed(2)
+  const bsa = Math.sqrt((safeLiveHeight * safeLiveWeight) / 3600).toFixed(2)
+  const lbm = (0.407 * safeLiveWeight + 0.267 * safeLiveHeight - 19.2).toFixed(1)
 
   // Telemetría instantánea en la cota exacta del haz láser
   const liveTelemetry = useMemo(() => {
@@ -1072,12 +1077,16 @@ function RealisticHumanBody({
   const baseHeight = 172.0
   const baseWeight = 68.0
 
-  const wRatio = (measurements.weight || baseWeight) / baseWeight
-  const hRatio = (measurements.height || baseHeight) / baseHeight
-  const waistRatio = (measurements.waist || 74.0) / 74.0
+  const safeH = measurements.height < 3.0 ? Math.round(measurements.height * 100) : (measurements.height || baseHeight)
+  const safeW = measurements.weight && measurements.weight > 20 && measurements.weight < 350 ? measurements.weight : baseWeight
 
-  const widthFactor = Math.pow(wRatio, 0.46) * Math.pow(waistRatio, 0.22)
-  const depthFactor = Math.pow(wRatio, 0.52) * Math.pow(waistRatio, 0.28)
+  const wRatio = safeW / baseWeight
+  const hRatio = Math.max(0.75, Math.min(safeH / baseHeight, 1.35))
+  const waistRatio = Math.max(0.7, Math.min((measurements.waist || 74.0) / 74.0, 1.8))
+
+  // Balanced morph factors: natural human body expansion without flattening
+  const widthFactor = Math.pow(Math.max(0.65, Math.min(wRatio, 2.2)), 0.38) * Math.pow(waistRatio, 0.18)
+  const depthFactor = Math.pow(Math.max(0.65, Math.min(wRatio, 2.2)), 0.42) * Math.pow(waistRatio, 0.22)
   const heightFactor = hRatio
 
   // With scene rotation [0, Math.PI / 2, 0]:
@@ -1314,23 +1323,23 @@ function RealisticHumanBody({
       {(layer === 'measurements' || show3DCallouts) && (
         <group>
           {/* Perímetro Tórax */}
-          <mesh position={[0, 1.25, 0.01]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
-            <torusGeometry args={[0.21, 0.007, 16, 48]} />
+          <mesh position={[0, 1.25 * heightFactor, 0.01]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
+            <torusGeometry args={[0.21 * widthFactor, 0.007, 16, 48]} />
           </mesh>
           {/* Perímetro Cintura */}
-          <mesh position={[0, 1.05, 0.0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
-            <torusGeometry args={[0.165, 0.007, 16, 48]} />
+          <mesh position={[0, 1.05 * heightFactor, 0.0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
+            <torusGeometry args={[0.165 * widthFactor, 0.007, 16, 48]} />
           </mesh>
           {/* Perímetro Cadera */}
-          <mesh position={[0, 0.90, 0.0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
-            <torusGeometry args={[0.195, 0.007, 16, 48]} />
+          <mesh position={[0, 0.88 * heightFactor, 0.0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
+            <torusGeometry args={[0.195 * widthFactor, 0.007, 16, 48]} />
           </mesh>
           {/* Perímetro Muslos */}
-          <mesh position={[-0.10, 0.68, 0.0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
-            <torusGeometry args={[0.092, 0.006, 16, 48]} />
+          <mesh position={[-0.10 * widthFactor, 0.65 * heightFactor, 0.0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
+            <torusGeometry args={[0.092 * widthFactor, 0.006, 16, 48]} />
           </mesh>
-          <mesh position={[0.10, 0.68, 0.0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
-            <torusGeometry args={[0.092, 0.006, 16, 48]} />
+          <mesh position={[0.10 * widthFactor, 0.65 * heightFactor, 0.0]} rotation={[Math.PI / 2, 0, 0]} material={metricRingMaterial}>
+            <torusGeometry args={[0.092 * widthFactor, 0.006, 16, 48]} />
           </mesh>
         </group>
       )}
@@ -1338,17 +1347,17 @@ function RealisticHumanBody({
       {/* Floating 3D Measurement Pin Callouts */}
       {show3DCallouts && (
         <group>
-          <Html position={[0.32, 1.74, 0]}>
+          <Html position={[0.32, 1.70 * heightFactor, 0]}>
             <div className="pin-3d-tag">
               <span className="dot" />
               <div>
                 <b>Vértex Craneal</b>
-                <span>{measurements.height} cm</span>
+                <span>{safeH} cm</span>
               </div>
             </div>
           </Html>
 
-          <Html position={[0.34, 1.25, 0]}>
+          <Html position={[0.34, 1.25 * heightFactor, 0]}>
             <div className="pin-3d-tag">
               <span className="dot" />
               <div>
@@ -1358,7 +1367,7 @@ function RealisticHumanBody({
             </div>
           </Html>
 
-          <Html position={[-0.34, 1.05, 0]}>
+          <Html position={[-0.34, 1.05 * heightFactor, 0]}>
             <div className="pin-3d-tag">
               <span className="dot" />
               <div>
@@ -1368,7 +1377,7 @@ function RealisticHumanBody({
             </div>
           </Html>
 
-          <Html position={[0.34, 0.90, 0]}>
+          <Html position={[0.34, 0.88 * heightFactor, 0]}>
             <div className="pin-3d-tag">
               <span className="dot" />
               <div>

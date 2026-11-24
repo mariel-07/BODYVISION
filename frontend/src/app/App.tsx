@@ -3,9 +3,11 @@ import {
   Activity, Archive, Camera, CircleUserRound,
   Cuboid, FileText, LayoutDashboard, LockKeyhole,
   ScanFace, Settings, ShieldCheck, SlidersHorizontal,
-  UserCheck, ChevronDown
+  UserCheck, ChevronDown, LogOut, Globe
 } from 'lucide-react'
 import { api, Profile, DashboardStats } from '../services/api'
+import { LoginView, AuthUser } from '../features/auth/LoginView'
+import { LandingPageView } from '../features/landing/LandingPageView'
 
 // Feature Modules
 import { DashboardView } from '../features/dashboard/DashboardView'
@@ -31,10 +33,40 @@ const nav = [
 ] as const
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('bv_auth_user')
+      return saved ? JSON.parse(saved) : null
+    } catch {
+      return null
+    }
+  })
+
+  const [viewMode, setViewMode] = useState<'landing' | 'login' | 'workspace'>(() => {
+    const saved = localStorage.getItem('bv_auth_user')
+    return saved ? 'workspace' : 'landing'
+  })
+
   const [section, setSection] = useState('Dashboard')
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [error, setError] = useState('')
+
+  const handleLogin = (user: AuthUser) => {
+    setCurrentUser(user)
+    setViewMode('workspace')
+    try {
+      localStorage.setItem('bv_auth_user', JSON.stringify(user))
+    } catch {}
+  }
+
+  const handleLogout = () => {
+    setCurrentUser(null)
+    setViewMode('landing')
+    try {
+      localStorage.removeItem('bv_auth_user')
+    } catch {}
+  }
 
   // Shared context across navigation with localStorage persistence
   const [contextProfileId, setContextProfileId] = useState<number | null>(() => {
@@ -82,6 +114,24 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  // If unauthenticated or user explicitly chose landing
+  if (viewMode === 'landing') {
+    return (
+      <LandingPageView
+        onEnterPortal={() => setViewMode(currentUser ? 'workspace' : 'login')}
+      />
+    )
+  }
+
+  if (viewMode === 'login' || !currentUser) {
+    return (
+      <LoginView
+        onLogin={handleLogin}
+        onBackToLanding={() => setViewMode('landing')}
+      />
+    )
+  }
+
   const activeProfile = profiles.find(p => p.id === contextProfileId) || profiles[0]
 
   return (
@@ -98,7 +148,7 @@ export default function App() {
 
         <div className="workspace">
           <span className="dot" /> SISTEMA CLÍNICO ACTIVO
-          <small>ARQUITECTURA ENTERPRISE</small>
+          <small>SESIÓN: {currentUser.role.toUpperCase()}</small>
         </div>
 
         {/* Global Active Patient Selector Widget in Sidebar */}
@@ -150,7 +200,7 @@ export default function App() {
             <h1>{section}</h1>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             {activeProfile && (
               <div className="topbar-patient-pill" onClick={() => handleNavigate('Expedientes', activeProfile.id)}>
                 <UserCheck size={15} color="#0d9488" />
@@ -164,10 +214,30 @@ export default function App() {
             <div className="top-user">
               <div className="avatar"><CircleUserRound size={20} /></div>
               <div>
-                <b>Dra. Valeria Morales</b>
-                <span>Especialista Clínico Colegiado</span>
+                <b>{currentUser.fullName}</b>
+                <span>{currentUser.specialty || currentUser.role}</span>
               </div>
             </div>
+
+            <button
+              type="button"
+              className="btn-logout"
+              onClick={() => setViewMode('landing')}
+              title="Ver Landing Page Institucional"
+            >
+              <Globe size={14} color="#0d9488" />
+              <span>Sitio Web</span>
+            </button>
+
+            <button
+              type="button"
+              className="btn-logout"
+              onClick={handleLogout}
+              title="Cerrar sesión clínica"
+            >
+              <LogOut size={14} />
+              <span>Salir</span>
+            </button>
           </div>
         </header>
 

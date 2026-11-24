@@ -1,14 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import {
-  Users, Activity, Radio, Award, ArrowUpRight, ChevronRight,
-  Sparkles, Flame, Layers, ShieldCheck, FileText, Settings,
-  AlertTriangle, Archive, Camera, ScanFace, Cuboid, SlidersHorizontal,
-  CheckCircle2, RefreshCw, UserCheck
+  Users, Activity, Radio, Award, ArrowUpRight,
+  Sparkles, Flame, Layers, FileText,
+  RefreshCw, UserCheck
 } from 'lucide-react'
-import { Profile, DashboardStats } from '../../services/api'
+import { Profile, DashboardStats, api } from '../../services/api'
 import { Dashboard3DViewer, ActiveLayer } from './Dashboard3DViewer'
-import { BiometricsAccordion } from './BiometricsAccordion'
-import { ThermalMapPanel } from './ThermalMapPanel'
 import { ClinicalRecommendations } from './ClinicalRecommendations'
 
 interface DashboardViewProps {
@@ -44,6 +41,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // Selected anatomical hotspot synchronized across 3D, biometrics & thermal map
   const [selectedHotspot, setSelectedHotspot] = useState<string | null>('cervical')
+
+  // Real patient metrics loaded dynamically
+  const [patientMetrics, setPatientMetrics] = useState<{ height: number; weight: number }>({ height: 172, weight: 68 })
+
+  useEffect(() => {
+    if (selectedProfileId && selectedProfileId !== 'demo') {
+      api.measurements(Number(selectedProfileId))
+        .then(data => {
+          if (data && data.length > 0) {
+            const getVal = (mName: string, fb: number) => {
+              const f = data.find(m => m.metric.toLowerCase().includes(mName.toLowerCase()))
+              return f ? f.value : fb
+            }
+            const rawH = getVal('Estatura', 172)
+            const safeH = rawH < 3.0 ? Math.round(rawH * 100) : rawH
+            const rawW = getVal('Peso', 68)
+            setPatientMetrics({
+              height: safeH >= 100 && safeH <= 250 ? safeH : 172,
+              weight: rawW > 20 && rawW < 350 ? rawW : 68
+            })
+          }
+        })
+        .catch(() => {})
+    }
+  }, [selectedProfileId])
+
+  const calculatedBmi = (patientMetrics.weight / Math.pow(patientMetrics.height / 100, 2)).toFixed(1)
 
   // Calculate top KPI numbers
   const patientCount = stats ? (stats.profiles_count > 0 ? stats.profiles_count : 247) : 247
@@ -95,9 +119,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             ))}
           </select>
           <div className="patient-mini-meta">
-            <span>Estatura: <b>172 cm</b></span>
-            <span>Peso: <b>68 kg</b></span>
-            <span>IMC: <b style={{ color: '#0d9488' }}>23.0</b></span>
+            <span>Estatura: <b>{patientMetrics.height} cm</b></span>
+            <span>Peso: <b>{patientMetrics.weight} kg</b></span>
+            <span>IMC: <b style={{ color: Number(calculatedBmi) < 25 ? '#0d9488' : Number(calculatedBmi) < 30 ? '#f59e0b' : '#ef4444' }}>{calculatedBmi}</b></span>
           </div>
         </div>
       </div>
@@ -186,42 +210,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* ============================================================ */}
-      {/* 2. PANEL PRINCIPAL EN 3 COLUMNAS INTERCONECTADAS:             */}
-      {/*    A) Izquierda-Central: Visualización 3D del Cuerpo Humano   */}
-      {/*    B) Central: Paneles de Análisis Corporal & Métricas       */}
-      {/*    C) Derecha: Mapa Térmico / Análisis de Superficie          */}
+      {/* 2. VISOR 3D PRINCIPAL (ancho completo, tabs integrados)       */}
       {/* ============================================================ */}
-      <div className="dash-core-triad-grid">
-        {/* Costado Izquierdo-Central: Visualización 3D */}
-        <div className="triad-col-3d">
-          <Dashboard3DViewer
-            activeLayer={activeLayer}
-            setActiveLayer={setActiveLayer}
-            selectedHotspot={selectedHotspot}
-            onSelectHotspot={setSelectedHotspot}
-            patientName={patientDisplayName}
-          />
-        </div>
-
-        {/* Zona Central: Paneles de Análisis Corporal & Métricas */}
-        <div className="triad-col-biometrics">
-          <BiometricsAccordion
-            activeLayer={activeLayer}
-            setActiveLayer={setActiveLayer}
-            selectedHotspot={selectedHotspot}
-            onSelectHotspot={setSelectedHotspot}
-          />
-        </div>
-
-        {/* Costado Derecho: Mapa Térmico / Análisis de Superficie */}
-        <div className="triad-col-thermal">
-          <ThermalMapPanel
-            selectedHotspot={selectedHotspot}
-            onSelectHotspot={setSelectedHotspot}
-            activeLayer={activeLayer}
-            setActiveLayer={setActiveLayer}
-          />
-        </div>
+      <div className="dash-viewer-fullwidth">
+        <Dashboard3DViewer
+          activeLayer={activeLayer}
+          setActiveLayer={setActiveLayer}
+          selectedHotspot={selectedHotspot}
+          onSelectHotspot={setSelectedHotspot}
+          patientName={patientDisplayName}
+          patientWeight={patientMetrics.weight}
+        />
       </div>
 
       {/* ============================================================ */}
